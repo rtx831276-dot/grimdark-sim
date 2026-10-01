@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Grimdark Sim V0 — Simulateur tactique isométrique 2.5D</title>
+    <meta name="description" content="Prototype jouable d'un simulateur de guerre tactique isométrique 2.5D grimdark : village ruiné, église, tranchées, morale, suppression, artillerie." />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="battlefield"></canvas>
+
+      <aside id="hud">
+        <header class="panel topbar">
+          <div class="brand">GRIMDARK<span>SIM</span><em>v0</em></div>
+          <div class="readouts">
+            <span id="clock" class="clock">00:00</span>
+            <span id="speed" class="speed">1×</span>
+          </div>
+        </header>
+
+        <section id="scoreboard" class="panel scoreboard"></section>
+
+        <section class="panel orders">
+          <div class="row">
+            <button data-action="stance" data-value="advance" title="Assaut : avancer vers l'objectif le plus utile (F)">Assaut</button>
+            <button data-action="stance" data-value="hold" title="Tenir : rester sur place et chercher un abri (H)">Tenir</button>
+            <button data-action="stance" data-value="fallback" title="Repli : reculer vers la ligne arrière (R)">Repli</button>
+          </div>
+          <div class="row">
+            <button data-action="rally" title="Ralliement : rendre du moral aux troupes autour d'un officier (T)">Ralliement</button>
+            <button data-action="mode" data-value="grenade" title="Lancer une grenade sur un point (G)">Grenade</button>
+            <button data-action="mode" data-value="artillery" title="Demander un barrage d'artillerie hors-carte (B)">Barrage</button>
+          </div>
+          <div class="row">
+            <button data-action="pause" title="Suspendre le temps (Espace)">⏸ Pause</button>
+            <button data-action="speed" data-value="1" title="Vitesse normale (1)">1×</button>
+            <button data-action="speed" data-value="2" title="Deux fois plus vite (2)">2×</button>
+            <button data-action="speed" data-value="4" title="Quatre fois plus vite (3)">4×</button>
+          </div>
+          <div class="row">
+            <button data-action="flag" data-value="cover" title="Afficher la couverture du terrain (C)">Couverture</button>
+            <button data-action="flag" data-value="los" title="Afficher lignes de vue et portées (L)">Vues</button>
+            <button data-action="flag" data-value="paths" title="Afficher les chemins en cours (P)">Chemins</button>
+          </div>
+          <div class="row">
+            <button data-action="newBattle" title="Relancer une bataille avec une nouvelle graine">Nouvelle bataille</button>
+          </div>
+        </section>
+
+        <section id="selection" class="panel selection"></section>
+
+        <section id="log" class="panel log">
+          <ul><li class="hint">— début de la bataille —</li></ul>
+        </section>
+
+        <details class="panel help">
+          <summary>Aide · commandes</summary>
+          <ul>
+            <li><b>Clic gauche</b> — sélectionner une unité ; <b>clic glissé</b> — sélectionner un groupe.</li>
+            <li><b>Clic droit</b> — ordre de déplacement, ou d'attaque sur un ennemi.</li>
+            <li><b>Molette</b> — zoom ; <b>clic central</b> ou <b>ZQSD/WASD</b> — déplacer la caméra.</li>
+            <li><b>F / H / R / T</b> — assaut, tenir, repli, ralliement.</li>
+            <li><b>G / B</b> — grenade, barrage d'artillerie (puis clic gauche sur la cible).</li>
+            <li><b>C / L / P</b> — couverture, lignes de vue, chemins.</li>
+            <li><b>Espace</b> — pause ; <b>1 / 2 / 3</b> — vitesse ×1, ×2, ×4.</li>
+          </ul>
+          <p class="hint">
+            Les deux camps sont pilotables : c'est un bac à sable. Sans ordre, chaque unité applique
+            sa doctrine : chercher un couvert, arroser l'ennemi, avancer sur les objectifs, se replier
+            quand le moral casse.
+          </p>
+        </details>
+      </aside>
+
+      <div id="banner" class="banner hidden"></div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

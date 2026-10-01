@@ -1,0 +1,9 @@
+# Fin de ligne normalisée : le dépôt travaille en LF, quel que soit l'OS du poste.
+# Évite les diffs fantômes quand un agent travaille sous Windows et la CI sous Linux.
+* text=auto eol=lf
+
+# Binaires
+*.png binary
+*.jpg binary
+*.webm binary
+*.woff2 binary
