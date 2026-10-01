@@ -1,53 +1,59 @@
-import { distance } from '../core/math';
-import type { Vec2 } from '../core/ids';
-import { unitDef } from '../data/units';
-import { weapon } from '../data/weapons';
-import { callArtilleryStrike, useCharge, useGrenade } from './abilities';
-import { acquireTarget, canFire, effectiveAccuracy, fireSalvo } from './combat';
-import { lineOfSight } from './los';
-import { bestObjectiveFor, terrainAt } from './map';
-import { followPath, hasArrived, requestPath } from './movement';
-import { useRally } from './morale';
-import { findCoverNear } from './pathfinding';
-import type { SimState, Unit } from './types';
+import { distance } from '../../core/math';
+import { unitDef } from '../../data/units';
+import { weapon } from '../../data/weapons';
+import { callArtilleryStrike, useCharge, useGrenade } from '../abilities';
+import { acquireTarget, canFire, effectiveAccuracy, fireSalvo } from '../combat';
+import { lineOfSight } from '../los';
+import { terrainAt } from '../map';
+import { followPath, hasArrived, requestPath } from '../movement';
+import { useRally } from '../morale';
+import { findCoverNear } from '../pathfinding';
+import type { SimState, Unit } from '../types';
+import { commanderFireSupportTarget } from './commanderAI';
+import { squadMovementIntent, squadShouldRally } from './squadAI';
 
 /**
- * IA « légère » (exigence V0) : pas d'arbre de comportement, pas de planification longue.
- * Chaque unité suit une courte cascade de priorités, recalculée à chaque tick :
+ * COUCHE SOLDAT — « que fait cet homme, maintenant ? »
  *
- *   1. démoralisée            -> se replie vers sa ligne arrière et quitte le champ
- *   2. ordre du joueur        -> déplacement ou cible désignée
- *   3. capacité situationnelle-> charge fanatique, grenade sur cible terrée, ralliement
- *   4. ennemi en vue          -> tirer s'il est à portée, manœuvrer sinon
- *   5. sinon                  -> avancer vers l'objectif le plus intéressant
+ * C'est la couche qui exécute. Elle ne décide jamais d'un objectif collectif (couche
+ * escouade) ni de l'allocation du feu lourd (couche commandement) : elle applique leurs
+ * désignations à une unité précise.
  *
- * C'est volontairement simple : les unités sont dangereuses par leur nombre et leur feu,
- * pas par leur intelligence.
+ * Cascade de priorités, réévaluée à chaque tick :
+ *
+ *   1. démoralisé       -> repli vers la ligne arrière, puis sortie du champ
+ *   2. ordre du joueur  -> déplacement ou cible désignée
+ *   3. sous le feu à découvert -> chercher un abri AVANT de répondre
+ *   4. capacité         -> charge, ralliement, barrage demandé, grenade
+ *   5. ennemi en vue    -> tirer s'il est à portée, manœuvrer sinon
+ *   6. sinon            -> appliquer la posture de l'escouade (assaut / tenir / repli)
+ *
+ * Volontairement bête et lisible : un soldat est dangereux par son nombre et son feu,
+ * pas par son intelligence. Aucun modèle de langage n'intervient ici.
  */
+
 /** En dessous de cette chance de toucher, l'unité garde ses munitions. */
-const MIN_FIRE_ACCURACY = 0.08;
+export const MIN_FIRE_ACCURACY = 0.08;
 
-export function updateAi(state: SimState, dt: number): void {
-  for (const unit of state.units) {
-    if (!unit.alive) continue;
-    updateCover(state, unit);
+/** Un tick de la couche soldat pour une unité donnée. */
+export function updateSoldier(state: SimState, unit: Unit, dt: number): void {
+  updateCover(state, unit);
 
-    if (unit.state === 'broken') {
-      handleBroken(state, unit, dt);
-      unit.intent = 'repli';
-      continue;
-    }
-
-    if (executePlayerOrders(state, unit, dt)) continue;
-    if (seekCoverIfExposed(state, unit, dt)) continue;
-    if (trySpecialAbility(state, unit, dt)) continue;
-    if (engageOrManoeuvre(state, unit, dt)) continue;
-    advanceOrHold(state, unit, dt);
+  if (unit.state === 'broken') {
+    handleBroken(state, unit, dt);
+    unit.intent = 'repli';
+    return;
   }
+
+  if (executePlayerOrders(state, unit, dt)) return;
+  if (seekCoverIfExposed(state, unit, dt)) return;
+  if (trySoldierAbilities(state, unit, dt)) return;
+  if (engageOrManoeuvre(state, unit, dt)) return;
+  advanceOrHold(state, unit, dt);
 }
 
 /* ------------------------------------------------------------------ *
- * 2. Ordres explicites
+ * 2. Ordres explicites du joueur
  * ------------------------------------------------------------------ */
 
 function executePlayerOrders(state: SimState, unit: Unit, dt: number): boolean {
@@ -83,7 +89,7 @@ function executePlayerOrders(state: SimState, unit: Unit, dt: number): boolean {
 }
 
 /* ------------------------------------------------------------------ *
- * 3. Capacités
+ * 3. Réflexe : se mettre à couvert
  * ------------------------------------------------------------------ */
 
 /**
@@ -108,9 +114,14 @@ function seekCoverIfExposed(state: SimState, unit: Unit, dt: number): boolean {
   return true;
 }
 
-function trySpecialAbility(state: SimState, unit: Unit, dt: number): boolean {
+/* ------------------------------------------------------------------ *
+ * 4. Capacités du soldat
+ * ------------------------------------------------------------------ */
+
+function trySoldierAbilities(state: SimState, unit: Unit, dt: number): boolean {
   const def = unitDef(unit.defId);
 
+  // Charge fanatique : on ne la déclenche que sous le feu, quand tenir ne suffit plus.
   const charge = unit.abilities.charge;
   if (def.abilities.includes('charge') && charge && charge.charges > 0 && unit.suppression > 45 && unit.chargeTicks <= 0) {
     const nearest = acquireTarget(state, unit, false);
@@ -123,32 +134,25 @@ function trySpecialAbility(state: SimState, unit: Unit, dt: number): boolean {
     }
   }
 
+  // Ralliement : décidé par l'escouade (« la ligne flanche-t-elle ? »), exécuté ici.
   const rally = unit.abilities.rally;
-  if (rally && rally.charges > 0 && rally.cooldown <= 0) {
-    let inShock = 0;
-    for (const other of state.units) {
-      if (!other.alive || other.faction !== unit.faction || other.id === unit.id) continue;
-      if (other.suppression > 60 || other.morale < 40) inShock++;
-    }
-    if (inShock >= 2) {
-      useRally(state, unit);
-      unit.intent = 'ralliement';
+  if (rally && rally.charges > 0 && rally.cooldown <= 0 && squadShouldRally(state, unit)) {
+    useRally(state, unit);
+    unit.intent = 'ralliement';
+    return true;
+  }
+
+  // Feu d'artillerie : la cible est désignée par le commandement, la demande part d'ici.
+  const artillery = unit.abilities.artillery;
+  if (artillery && artillery.charges > 0 && artillery.cooldown <= 0 && unit.suppression < 45) {
+    const cluster = commanderFireSupportTarget(state, unit);
+    if (cluster && callArtilleryStrike(state, unit.faction, cluster.x, cluster.y)) {
+      unit.intent = 'barrage demandé';
       return true;
     }
   }
 
-  const artillery = unit.abilities.artillery;
-  if (artillery && artillery.charges > 0 && artillery.cooldown <= 0 && unit.suppression < 45) {
-    const runtime = state.factions[unit.faction];
-    const cluster = runtime && runtime.barrages > 0 ? enemyCluster(state, unit, 24) : null;
-    if (cluster) {
-      if (callArtilleryStrike(state, unit.faction, cluster.x, cluster.y)) {
-        unit.intent = 'barrage demandé';
-        return true;
-      }
-    }
-  }
-
+  // Grenade : on ne la gaspille que sur une cible terrée, clouée au sol ou hors de vue.
   const grenade = unit.abilities.grenade;
   if (grenade && grenade.charges > 0 && grenade.cooldown <= 0) {
     const gun = weapon('grenade_frag');
@@ -156,7 +160,6 @@ function trySpecialAbility(state: SimState, unit: Unit, dt: number): boolean {
     if (target) {
       const dist = distance(unit.x, unit.y, target.x, target.y);
       const los = lineOfSight(state.map, unit.x, unit.y, target.x, target.y);
-      // On ne gaspille une grenade que sur une cible terrée, clouée au sol ou hors de vue.
       if (dist <= gun.range && (target.cover > 0.4 || target.suppression > 40 || !los.visible)) {
         if (useGrenade(state, unit, target.x, target.y)) {
           unit.intent = 'grenade';
@@ -170,7 +173,7 @@ function trySpecialAbility(state: SimState, unit: Unit, dt: number): boolean {
 }
 
 /* ------------------------------------------------------------------ *
- * 4. Engagement
+ * 5. Engagement
  * ------------------------------------------------------------------ */
 
 function engageOrManoeuvre(state: SimState, unit: Unit, dt: number): boolean {
@@ -206,21 +209,21 @@ function engageOrManoeuvre(state: SimState, unit: Unit, dt: number): boolean {
 }
 
 /* ------------------------------------------------------------------ *
- * 5. Posture
+ * 6. Posture (intention d'escouade, exécution individuelle)
  * ------------------------------------------------------------------ */
 
 function advanceOrHold(state: SimState, unit: Unit, dt: number): void {
-  if (unit.stance === 'fallback') {
-    const line = state.map.def.fallbackLine[unit.faction];
+  const intent = squadMovementIntent(state, unit);
+
+  if (intent.kind === 'fallback') {
     unit.intent = 'repli volontaire';
-    if (line) {
-      if (unit.path.length === 0) requestPath(state, unit, line.x, line.y, 2);
-      followPath(state, unit, dt);
-    }
+    if (!intent.line) return;
+    if (unit.path.length === 0) requestPath(state, unit, intent.line.x, intent.line.y, 2);
+    followPath(state, unit, dt);
     return;
   }
 
-  if (unit.stance === 'hold') {
+  if (intent.kind === 'hold') {
     unit.intent = 'tenir';
     // Tenir la position ne veut pas dire rester debout à découvert : on cherche un abri proche.
     if (unit.path.length === 0 && unit.cover < 0.25) {
@@ -235,8 +238,7 @@ function advanceOrHold(state: SimState, unit: Unit, dt: number): void {
     return;
   }
 
-  const enemyCentroid = centroidOfEnemies(state, unit);
-  const objective = bestObjectiveFor(state.map, unit.x, unit.y, enemyCentroid ?? undefined);
+  const { objective } = intent;
   unit.intent = `avance: ${objective.label}`;
   const distToObjective = distance(unit.x, unit.y, objective.x, objective.y);
   if (distToObjective > objective.radius * 0.8) {
@@ -275,7 +277,7 @@ function handleBroken(state: SimState, unit: Unit, dt: number): void {
 }
 
 /* ------------------------------------------------------------------ *
- * Perception
+ * Perception du soldat
  * ------------------------------------------------------------------ */
 
 /** Couverture courante de l'unité face à l'ennemi le plus proche (exposée au HUD). */
@@ -290,36 +292,8 @@ export function updateCover(state: SimState, unit: Unit): void {
   unit.cover = Math.min(0.85, own + los.obstruction * 0.55);
 }
 
-/**
- * Cherche un groupe d'ennemis visible : c'est la seule cible qui vaut un barrage.
- * Un observateur ne gaspille pas 5 obus sur un éclaireur isolé.
- */
-function enemyCluster(state: SimState, unit: Unit, maxRange: number): Vec2 | null {
-  let best: Vec2 | null = null;
-  let bestScore = 0;
-  for (const other of state.units) {
-    if (!other.alive || other.faction === unit.faction) continue;
-    if (distance(unit.x, unit.y, other.x, other.y) > maxRange) continue;
-    if (!lineOfSight(state.map, unit.x, unit.y, other.x, other.y).visible) continue;
-
-    let neighbours = 0;
-    for (const third of state.units) {
-      if (!third.alive || third.faction === unit.faction || third.id === other.id) continue;
-      if (distance(other.x, other.y, third.x, third.y) <= 3) neighbours++;
-    }
-    // Seuil volontairement élevé : un barrage est une ressource rare, pas un réflexe.
-    if (neighbours < 2) continue;
-
-    const score = neighbours * 2 + (1 - other.cover) + (1 - other.hp / other.maxHp);
-    if (score > bestScore) {
-      bestScore = score;
-      best = { x: other.x, y: other.y };
-    }
-  }
-  return best;
-}
-
-function nearestEnemy(state: SimState, unit: Unit): Unit | null {
+/** Ennemi vivant le plus proche, sans considérer la ligne de vue (menace ressentie). */
+export function nearestEnemy(state: SimState, unit: Unit): Unit | null {
   let nearest: Unit | null = null;
   let nearestDist = Number.POSITIVE_INFINITY;
   for (const other of state.units) {
@@ -331,18 +305,4 @@ function nearestEnemy(state: SimState, unit: Unit): Unit | null {
     }
   }
   return nearest;
-}
-
-function centroidOfEnemies(state: SimState, unit: Unit): Vec2 | null {
-  let sx = 0;
-  let sy = 0;
-  let count = 0;
-  for (const other of state.units) {
-    if (!other.alive || other.faction === unit.faction) continue;
-    sx += other.x;
-    sy += other.y;
-    count++;
-  }
-  if (count === 0) return null;
-  return { x: sx / count, y: sy / count };
 }

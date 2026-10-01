@@ -111,7 +111,11 @@ donnent **exactement** le même hash.
 | `src/sim/morale.ts` | 151 | Suppression, moral, transitions d'état, ralliement, aura de commandement |
 | `src/sim/explosion.ts` | 89 | Point unique de résolution des explosions (dégâts + terrain + moral) |
 | `src/sim/abilities.ts` | 160 | Grenades, barrages d'artillerie, charge, temps de recharge |
-| `src/sim/ai.ts` | 348 | IA légère : couvert, capacités, engagement, posture |
+| `src/sim/ai/index.ts` | 39 | Orchestrateur IA : parcours des unités, une cascade par tick |
+| `src/sim/ai/commanderAI.ts` | 145 | **Commandement** : désignation d'objectif, allocation du feu d'artillerie |
+| `src/sim/ai/squadAI.ts` | 90 | **Escouade** : intention de mouvement collective (assaut/tenir/repli), ralliement, cohésion |
+| `src/sim/ai/soldierAI.ts` | 308 | **Soldat** : cascade individuelle (repli, ordres, couvert, capacités, tir, posture appliquée) |
+| `src/sim/ai/undeadAI.ts` | 72 | **Non-morte** : troisième force, spécifiée et testée mais **non câblée** en V0 |
 | `src/sim/simulation.ts` | 467 | Création, déploiement, boucle `stepSimulation`, ordres, objectifs, victoire, `hashState` |
 | `src/render/iso.ts` | 45 | Projection isométrique 2:1 et son inverse (utilisée par la souris) |
 | `src/render/camera.ts` | 95 | Zoom, déplacement, cadrage, culling |
@@ -157,8 +161,10 @@ direct, rafale, tir de suppression, arc (grenade) et artillerie hors-carte.
 
 `src/data/units.ts` (statistiques + `abilities` + `traits`) puis `src/data/factions.ts`
 (composition, c'est ce qui décide qui l'aligne). Si la capacité est nouvelle, il faut
-aussi : le type d'`AbilityId`, sa résolution (`src/sim/abilities.ts`), son usage par l'IA
-(`src/sim/ai.ts`) et éventuellement un bouton dans le HUD.
+aussi : le type d'`AbilityId`, sa résolution (`src/sim/abilities.ts`), son usage par la
+couche concernée de l'IA (`src/sim/ai/soldierAI.ts` pour un réflexe individuel,
+`squadAI.ts` pour un comportement de groupe, `commanderAI.ts` pour une ressource de
+faction) et éventuellement un bouton dans le HUD.
 
 ### Ajouter une carte
 
@@ -166,6 +172,38 @@ Créer `src/data/maps/<nom>.ts` (module `MapDefinition`), la déclarer là où
 `createSimulation()` choisit la carte, puis `npm run map:inspect` pour vérifier
 l'alignement des colonnes. Les tests `tests/data.test.ts` valident la cohérence
 (glyphes, objectifs dans les bornes, zones de déploiement praticables, lignes de repli).
+
+### Étendre l'IA d'une couche
+
+L'IA est découpée en quatre couches de responsabilité (`src/sim/ai/`), dans cet ordre :
+
+```
+commanderAI   « que veut la faction ? »   objectifs, artillerie, pertes
+     │ désigne
+squadAI       « que fait le groupe ? »    avancer / tenir / décrocher, ralliement
+     │ décide la posture
+soldierAI     « que fait cet homme ? »    repli, ordres du joueur, couvert, capacités, tir
+     │ exécute
+undeadAI      « où va la horde ? »        troisième force — NON câblée en V0
+```
+
+Règles :
+
+- **Une couche inférieure ne consulte jamais une couche supérieure.** `soldierAI`
+  importe `squadAI` et `commanderAI` ; l'inverse n'existe pas (pas de cycle d'import).
+- **Décider n'est pas exécuter.** `squadMovementIntent()` rend une intention
+  (`advance` / `hold` / `fallback`) ; c'est `soldierAI` qui demande un chemin et déplace
+  l'unité. Idem pour l'artillerie : `commanderFireSupportTarget()` désigne le point,
+  `callArtilleryStrike()` (dans `abilities.ts`) exécute.
+- **Ajouter une couche ne change pas le comportement observable sans le dire.** Un
+  déplacement de logique entre couches doit laisser les empreintes headless identiques
+  (`npm run headless -- 777 300` avant/après). C'est ainsi que le découpage de la V0 a été
+  validé : mêmes ticks, mêmes pertes, mêmes hashes sur trois graines.
+- **Aucun modèle de langage dans la boucle.** L'arrêt de la mission est explicite :
+  pas de LLM pour les décisions d'unité. Un LLM (ou Master Copilot) n'a sa place qu'au
+  niveau le plus haut — écrire une doctrine de faction, générer un scénario, rédiger un
+  briefing — jamais décider d'un tir. La couche `commanderAI` est le seul point
+  d'accroche envisagé pour cela, et elle doit rester déterministe.
 
 ### Ajouter une mécanique de combat
 

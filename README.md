@@ -105,6 +105,7 @@ grimdark-sim/
 │   │   ├── factions.ts     #   les deux factions + composition d'armée
 │   │   └── maps/village-church.ts   # la carte en ASCII
 │   ├── sim/                # SIMULATION PURE (le jeu)
+│   │   └── ai/             #   IA en 4 couches : commandement, escouade, soldat, non-morte
 │   ├── render/             # rendu isométrique Canvas 2D
 │   ├── input/              # souris/clavier
 │   ├── ui/                 # HUD DOM
@@ -123,6 +124,7 @@ grimdark-sim/
 - [docs/VIBE_PROMPT.md](docs/VIBE_PROMPT.md) — la direction artistique et narrative, plus les prompts prêts à l'emploi pour des agents.
 - [docs/ROADMAP.md](docs/ROADMAP.md) — ce qui est fait, ce qui vient (V1, V2), et la porte de sortie vers Godot.
 - [docs/TECHNICAL_ARCHITECTURE.md](docs/TECHNICAL_ARCHITECTURE.md) — les règles d'architecture, comment ajouter une unité / une arme / une carte.
+- [docs/DEPENDENCY_SCAN.md](docs/DEPENDENCY_SCAN.md) — verdict ADOPT / STUDY / REJECT sur les bibliothèques candidates (**V0 : zéro dépendance runtime**).
 
 ## Hors périmètre volontaire (V0)
 

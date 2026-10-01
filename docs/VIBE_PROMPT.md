@@ -60,7 +60,8 @@ automatiquement** (`tests/architecture.test.ts`) : les casser fait échouer la s
 3. **Déterminisme.** Tout hasard de simulation passe par le `Rng` de l'état, dans un ordre d'appel stable. Interdit : `Math.random()` dans `src/sim`. Le rendu a son propre RNG.
 4. **Pas de valeur de gameplay en dur dans la simulation.** Chiffres, noms, couleurs, composition d'armée, carte : dans `src/data`.
 5. **Pas de dépendance à un autre projet.** Ce dépôt est autonome : rien de Master Copilot, rien d'externe au dépôt.
-6. **Pas d'IA profonde sans nécessité.** L'IA est une cascade courte et lisible (`src/sim/ai.ts`) — si elle a besoin d'un planificateur, c'est une décision d'architecture, pas un ajout discret.
+6. **Pas d'IA profonde sans nécessité.** L'IA est une cascade courte et lisible, découpée en quatre couches nommées (`src/sim/ai/` : commandement, escouade, soldat, non-morte) — si elle a besoin d'un planificateur, c'est une décision d'architecture, pas un ajout discret.
+7. **Aucun modèle de langage dans la boucle de jeu.** Pas de LLM pour décider ce que fait une unité : les décisions tactiques sont déterministes et testables. Un LLM n'intervient qu'au-dessus (doctrine de faction, génération de scénario, briefing), et ne produit jamais un ordre direct à un soldat.
 
 ---
 

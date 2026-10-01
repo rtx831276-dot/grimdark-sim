@@ -11,6 +11,8 @@ mesurable**. Chaque étape a une « preuve » : ce qui doit être vrai pour la c
 | --- | --- | --- |
 | Base projet installable (Vite + TypeScript + Vitest) | ✅ | `npm install && npm run build` |
 | Simulation séparée du rendu | ✅ | `tests/architecture.test.ts` |
+| IA découpée en quatre couches nommées (commandement / escouade / soldat / non-morte) | ✅ | `tests/ai-layers.test.ts`, `src/sim/ai/` |
+| Scan de dépendances des 6 bibliothèques candidates (0 dépendance runtime) | ✅ | `docs/DEPENDENCY_SCAN.md` |
 | Carte village + église + tranchées + no man's land | ✅ | `npm run map:inspect`, `tests/map.test.ts` |
 | Deux factions, 13 unités par camp | ✅ | `tests/simulation.test.ts` |
 | Caméra isométrique 2.5D, murs extrudés, tri de profondeur | ✅ | rendu navigateur |
@@ -18,7 +20,7 @@ mesurable**. Chaque étape a une « preuve » : ce qui doit être vrai pour la c
 | Grenades et artillerie simple | ✅ | `tests/explosion.test.ts`, `tests/simulation.test.ts` |
 | Terrain destructible basique (murs → gravats, boue → cratères) | ✅ | `tests/explosion.test.ts` |
 | Déterminisme (même graine ⇒ même bataille) | ✅ | `tests/simulation.test.ts` |
-| Documentation (README + 4 documents) | ✅ | `docs/` |
+| Documentation (README + 5 documents) | ✅ | `docs/` |
 
 **Ce qui a été appris en V0** : sans rechargements, sans discipline de tir et sans réflexe
 de mise à couvert, une bataille se termine en 23 secondes par extermination mutuelle.
@@ -76,6 +78,7 @@ Le moral n'est pas un supplément : c'est le système principal. Voir `docs/GAME
 - [ ] Outil de comparaison : 50 batailles headless, statistiques agrégées par faction (taux de victoire, morts, fuyards, obus).
 - [ ] Objectif : **50 % ± 10 %** de victoires par camp sur 50 graines, et **6 à 10 morts par camp** en moyenne.
 - *Preuve* : `npm run bisect:balance` (à écrire) affiche le tableau.
+- [ ] N'adopter une bibliothèque externe que sur un goulot **mesuré** : les critères et les déclencheurs de réévaluation sont dans `docs/DEPENDENCY_SCAN.md`.
 
 ---
 
