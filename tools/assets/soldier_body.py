@@ -91,7 +91,10 @@ for side, x in [('L', .14), ('R', -.14)]:
 box('rifle_blockout', (-.28, -.46, 1.03), (.065, .55, .10), dark, 'forearm.R')
 
 scene = bpy.context.scene
-scene.render.engine = 'BLENDER_EEVEE_NEXT'
+if 'BLENDER_EEVEE_NEXT' in [item.identifier for item in bpy.types.RenderSettings.bl_rna.properties['engine'].enum_items]:
+    scene.render.engine = 'BLENDER_EEVEE_NEXT'
+else:
+    scene.render.engine = 'BLENDER_EEVEE'
 scene.render.resolution_x = 256
 scene.render.resolution_y = 256
 scene.render.resolution_percentage = 100
