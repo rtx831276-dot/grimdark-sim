@@ -1,0 +1,202 @@
+{
+  "schema": "nohope.map.v1",
+  "id": "map01_broken_parish",
+  "name": "Broken Parish",
+  "size": {
+    "width": 256,
+    "height": 256
+  },
+  "camera": {
+    "mode": "isometric_2_5d",
+    "readability": "project_zomboid_like",
+    "tileProjection": "diamond"
+  },
+  "designPillars": [
+    "Men of War / Call to Arms tactical pressure",
+    "Project Zomboid 2.5D readability",
+    "modern fictional trench attrition",
+    "zombies prepared but not required in first combat pass"
+  ],
+  "objectives": [
+    {
+      "id": "obj_broken_parish",
+      "name": "Broken Parish",
+      "type": "major_capture",
+      "x": 128,
+      "y": 112,
+      "radius": 14,
+      "tags": ["church", "central", "high_value", "close_quarters"]
+    },
+    {
+      "id": "obj_grandrue",
+      "name": "Grand-Rue Crossing",
+      "type": "capture",
+      "x": 54,
+      "y": 132,
+      "radius": 12,
+      "tags": ["road", "urban", "flank_west"]
+    },
+    {
+      "id": "obj_burned_depot",
+      "name": "Burned Depot",
+      "type": "capture",
+      "x": 202,
+      "y": 122,
+      "radius": 12,
+      "tags": ["rail", "depot", "long_sightline", "flank_east"]
+    },
+    {
+      "id": "obj_south_bridge",
+      "name": "South Bridge",
+      "type": "capture",
+      "x": 128,
+      "y": 210,
+      "radius": 10,
+      "tags": ["bridge", "canal", "chokepoint"]
+    },
+    {
+      "id": "obj_cemetery_ridge",
+      "name": "Cemetery Ridge",
+      "type": "capture",
+      "x": 136,
+      "y": 44,
+      "radius": 12,
+      "tags": ["cemetery", "ridge", "future_undead_pressure"]
+    }
+  ],
+  "spawnZones": [
+    {
+      "id": "spawn_blue_main",
+      "side": "blue",
+      "rect": { "x": 18, "y": 182, "w": 42, "h": 46 },
+      "facing": "north_east",
+      "role": "player_start"
+    },
+    {
+      "id": "spawn_blue_reserve",
+      "side": "blue",
+      "rect": { "x": 74, "y": 216, "w": 42, "h": 24 },
+      "facing": "north",
+      "role": "reinforcement"
+    },
+    {
+      "id": "spawn_red_main",
+      "side": "red",
+      "rect": { "x": 194, "y": 28, "w": 42, "h": 46 },
+      "facing": "south_west",
+      "role": "enemy_start"
+    },
+    {
+      "id": "spawn_red_depot",
+      "side": "red",
+      "rect": { "x": 210, "y": 104, "w": 30, "h": 42 },
+      "facing": "west",
+      "role": "enemy_reserve"
+    },
+    {
+      "id": "spawn_undead_cemetery",
+      "side": "undead",
+      "rect": { "x": 102, "y": 18, "w": 68, "h": 42 },
+      "facing": "noise",
+      "role": "future_reanimation"
+    },
+    {
+      "id": "spawn_undead_nomansland",
+      "side": "undead",
+      "rect": { "x": 92, "y": 82, "w": 72, "h": 50 },
+      "facing": "noise",
+      "role": "future_reanimation"
+    }
+  ],
+  "terrainZones": [
+    { "id": "village_center", "terrain": "building_ruin", "rect": { "x": 82, "y": 84, "w": 78, "h": 70 }, "moveCost": 1.4 },
+    { "id": "church_ruin", "terrain": "building_ruin", "rect": { "x": 114, "y": 98, "w": 28, "h": 34 }, "moveCost": 1.5 },
+    { "id": "west_town", "terrain": "building_ruin", "rect": { "x": 22, "y": 104, "w": 58, "h": 62 }, "moveCost": 1.35 },
+    { "id": "burned_depot", "terrain": "rubble", "rect": { "x": 182, "y": 96, "w": 56, "h": 56 }, "moveCost": 1.3 },
+    { "id": "cemetery", "terrain": "rubble", "rect": { "x": 96, "y": 18, "w": 78, "h": 46 }, "moveCost": 1.25 },
+    { "id": "south_canal", "terrain": "water", "rect": { "x": 0, "y": 218, "w": 256, "h": 28 }, "moveCost": 999 },
+    { "id": "south_bridge", "terrain": "bridge", "rect": { "x": 118, "y": 204, "w": 22, "h": 42 }, "moveCost": 1.0 },
+    { "id": "no_mans_land", "terrain": "mud", "rect": { "x": 62, "y": 62, "w": 128, "h": 112 }, "moveCost": 1.25 }
+  ],
+  "trenchLines": [
+    {
+      "id": "blue_forward_trench",
+      "sideHint": "blue",
+      "polyline": [[18, 178], [44, 168], [68, 180], [92, 166], [116, 174], [144, 164]],
+      "width": 7,
+      "cover": "heavy",
+      "tags": ["defilade", "suppression_safe"]
+    },
+    {
+      "id": "red_forward_trench",
+      "sideHint": "red",
+      "polyline": [[104, 72], [128, 64], [154, 74], [178, 62], [206, 72], [236, 62]],
+      "width": 7,
+      "cover": "heavy",
+      "tags": ["defilade", "suppression_safe"]
+    },
+    {
+      "id": "depot_trench",
+      "sideHint": "red",
+      "polyline": [[174, 136], [196, 150], [218, 142], [240, 154]],
+      "width": 6,
+      "cover": "heavy",
+      "tags": ["depot_defense"]
+    }
+  ],
+  "coverZones": [
+    { "id": "west_craters", "cover": "light", "rect": { "x": 42, "y": 74, "w": 42, "h": 28 }, "tags": ["crater", "exposed"] },
+    { "id": "central_rubble", "cover": "medium", "rect": { "x": 92, "y": 122, "w": 62, "h": 34 }, "tags": ["rubble", "urban"] },
+    { "id": "church_walls", "cover": "heavy", "rect": { "x": 108, "y": 92, "w": 42, "h": 48 }, "tags": ["stone", "los_blocker"] },
+    { "id": "depot_wagons", "cover": "medium", "rect": { "x": 178, "y": 132, "w": 64, "h": 16 }, "tags": ["rail", "vehicle"] },
+    { "id": "south_bridge_barricade", "cover": "medium", "rect": { "x": 104, "y": 190, "w": 52, "h": 18 }, "tags": ["bridge", "chokepoint"] },
+    { "id": "cemetery_wall", "cover": "heavy", "rect": { "x": 92, "y": 62, "w": 88, "h": 8 }, "tags": ["wall", "los_blocker"] }
+  ],
+  "lineOfSightBlockers": [
+    { "id": "church_tower", "rect": { "x": 122, "y": 94, "w": 12, "h": 22 }, "height": 3 },
+    { "id": "west_apartment_ruin", "rect": { "x": 42, "y": 112, "w": 20, "h": 34 }, "height": 2 },
+    { "id": "central_row_houses", "rect": { "x": 86, "y": 100, "w": 18, "h": 48 }, "height": 2 },
+    { "id": "depot_hangar", "rect": { "x": 198, "y": 98, "w": 28, "h": 22 }, "height": 2 },
+    { "id": "cemetery_wall_north", "rect": { "x": 92, "y": 18, "w": 88, "h": 8 }, "height": 1 },
+    { "id": "canal_wall", "rect": { "x": 0, "y": 214, "w": 256, "h": 4 }, "height": 1 }
+  ],
+  "roads": [
+    { "id": "road_west_to_church", "polyline": [[0, 138], [54, 132], [96, 124], [128, 112]], "width": 8, "risk": "crossfire" },
+    { "id": "road_church_to_depot", "polyline": [[128, 112], [162, 116], [202, 122], [255, 126]], "width": 8, "risk": "long_sightline" },
+    { "id": "road_south_bridge", "polyline": [[128, 255], [128, 210], [126, 162], [128, 112]], "width": 7, "risk": "chokepoint" },
+    { "id": "rail_depot", "polyline": [[168, 154], [202, 122], [244, 96]], "width": 6, "risk": "open_flank" }
+  ],
+  "dangerZones": [
+    { "id": "danger_nomansland_open", "type": "open_kill_zone", "rect": { "x": 70, "y": 72, "w": 116, "h": 88 }, "severity": 0.85 },
+    { "id": "danger_bridge_chokepoint", "type": "chokepoint", "rect": { "x": 110, "y": 196, "w": 38, "h": 50 }, "severity": 0.75 },
+    { "id": "danger_depot_lanes", "type": "long_fire_lane", "rect": { "x": 160, "y": 104, "w": 80, "h": 46 }, "severity": 0.7 }
+  ],
+  "infectionZones": [
+    { "id": "infect_cemetery_mist", "rect": { "x": 100, "y": 24, "w": 70, "h": 36 }, "intensity": 0.6, "enabledIn": "future_v4" },
+    { "id": "infect_no_mans_land_corpses", "rect": { "x": 84, "y": 76, "w": 86, "h": 58 }, "intensity": 0.4, "enabledIn": "future_v4" },
+    { "id": "infect_depot_bodies", "rect": { "x": 188, "y": 136, "w": 42, "h": 26 }, "intensity": 0.35, "enabledIn": "future_v4" }
+  ],
+  "aiHints": {
+    "blue": {
+      "openingPlan": ["secure_south_bridge", "probe_grandrue", "suppress_church", "capture_broken_parish"],
+      "avoid": ["danger_nomansland_open"]
+    },
+    "red": {
+      "openingPlan": ["hold_cemetery_ridge", "hold_burned_depot", "interdict_church_roads"],
+      "avoid": ["south_bridge_if_outnumbered"]
+    },
+    "undead": {
+      "activation": "disabled_until_undead_system",
+      "targetPriority": ["noise", "living_nearby", "fresh_corpse", "capture_point"]
+    }
+  },
+  "validationRules": [
+    "all objectives must be inside map bounds",
+    "all spawn zones must be inside map bounds",
+    "water blocks movement except bridge terrain",
+    "lineOfSightBlockers block direct fire",
+    "trenchLines grant heavy cover and defilade",
+    "infectionZones must not affect gameplay until undead system is enabled"
+  ]
+}
+
