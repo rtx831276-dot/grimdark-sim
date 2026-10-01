@@ -7,7 +7,11 @@
  * canvas, sans navigateur — c'est ce qui permet de la tester et de la rejouer.
  */
 export * from './simulation';
-export * from './ai';
+// Spécificateur explicite (`./ai/index`) plutôt que le dossier `./ai` : c'est la seule
+// forme que Node natif sait résoudre sans bundler. Un specifier de dossier ne marche
+// qu'avec un résolveur de bundler — on ne veut pas dépendre d'un bundler pour lancer
+// une bataille en headless.
+export * from './ai/index';
 export * from './combat';
 export * from './morale';
 export * from './explosion';

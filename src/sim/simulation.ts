@@ -7,7 +7,7 @@ import { VILLAGE_CHURCH } from '../data/maps/village-church';
 import { unitDef } from '../data/units';
 import { weapon } from '../data/weapons';
 import { callArtilleryStrike, updateAbilityCooldowns, useGrenade } from './abilities';
-import { updateAi } from './ai';
+import { updateAi } from './ai/index';
 import { detonate } from './explosion';
 import { compileMap, inBounds, isSolid, nearestWalkable, tileAtFloor } from './map';
 import { isEffective, updateMorale, useRally } from './morale';
