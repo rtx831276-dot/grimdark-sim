@@ -68,7 +68,7 @@ export class BattleApp {
       onSpeedChange: (speed) => this.setSpeed(speed),
       onStanceOrder: (stance) => this.issueOrderForSelection({ type: stance, units: this.selectionIds() }),
       onRallyOrder: () => this.issueOrderForSelection({ type: 'rally', units: this.selectionIds() }),
-      onModeChange: (mode) => this.setMode(mode),
+      onModeChange: (mode) => this.armMode(mode),
       onToggleFlag: (flag) => this.toggleFlag(flag),
       onNewBattle: () => this.newBattle(),
     });
@@ -109,9 +109,11 @@ export class BattleApp {
   newBattle(): void {
     this.selection.clear();
     this.effects.clear();
+    // Graine tirée côté interface (le tirage peut être aléatoire, la bataille non) : elle est
+    // ensuite lue dans l'état, jamais devinée — ressemer ce nombre rejoue cette bataille.
     this.state = this.createState(Math.floor(Math.random() * 1_000_000));
     this.hud.clearLog();
-    this.hud.logEvent({ tick: 0, type: 'objectiveCaptured', label: `Nouvelle bataille — graine ${this.state.rng.snapshot()}` });
+    this.hud.logEvent({ tick: 0, type: 'objectiveCaptured', label: `Nouvelle bataille — graine ${this.state.seed}` });
     this.camera.centerOn(this.state.map.width / 2, this.state.map.height / 2);
   }
 
@@ -305,8 +307,19 @@ export class BattleApp {
     this.speed = speed;
   }
 
+  /** Miroir du mode réel : la source de vérité est `Controls.mode`, jamais l'inverse. */
   private setMode(mode: ControlMode): void {
     this.mode = mode;
+  }
+
+  /**
+   * Arme un mode de ciblage depuis le HUD, en repassant par les contrôles. Sans cela, le
+   * bouton allumait le viseur alors que `Controls` gardait son propre mode à « none » :
+   * le clic suivant sélectionnait au lieu de viser. Cliquer le mode déjà armé le désarme,
+   * comme la touche qui lui correspond.
+   */
+  private armMode(mode: ControlMode): void {
+    this.controls.setMode(this.controls.mode === mode ? 'none' : mode);
   }
 
   private toggleFlag(flag: keyof RenderFlags): void {
