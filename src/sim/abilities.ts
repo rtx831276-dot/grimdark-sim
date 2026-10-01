@@ -77,6 +77,26 @@ export function useGrenade(state: SimState, unit: Unit, x: number, y: number): b
 }
 
 /**
+ * Règle unique de disponibilité du feu hors-carte : il reste des charges, aucun temps de
+ * recharge n'est en cours. C'est la seule définition de « l'observateur peut désigner » ;
+ * le joueur et l'IA s'y réfèrent tous les deux, sinon l'un dispose d'une capacité que
+ * l'autre se refuse (le cooldown n'existait que pour l'IA en V0).
+ */
+export function artilleryReady(unit: Unit): boolean {
+  const slot = unit.abilities.artillery;
+  return Boolean(slot && slot.charges > 0 && slot.cooldown <= 0);
+}
+
+/** L'observateur d'artillerie de cette faction, s'il est en état de désigner une frappe. */
+export function artilleryObserver(state: SimState, faction: FactionId): Unit | null {
+  return (
+    state.units.find(
+      (u) => u.alive && u.faction === faction && unitDef(u.defId).abilities.includes('artillery') && artilleryReady(u),
+    ) ?? null
+  );
+}
+
+/**
  * Barrage d'artillerie hors-carte. La faction dispose de N barrages par bataille ;
  * un observateur doit être vivant pour demander la frappe. Les obus tombent étalés
  * sur plusieurs secondes, avec dispersion : c'est une arme de terreur, pas de précision.
@@ -85,15 +105,25 @@ export function callArtilleryStrike(state: SimState, faction: FactionId, x: numb
   const runtime = state.factions[faction];
   if (!runtime || runtime.barrages <= 0) return false;
 
-  const observer = state.units.find(
-    (u) =>
-      u.alive &&
-      u.faction === faction &&
-      unitDef(u.defId).abilities.includes('artillery') &&
-      (u.abilities.artillery?.charges ?? 0) > 0,
-  );
+  const observer = artilleryObserver(state, faction);
   if (!observer) {
-    state.events.push({ tick: state.tick, type: 'orderRefused', faction, x, y, label: 'aucun observateur disponible' });
+    // Distinguer « plus personne » de « il souffle » : le joueur doit savoir s'il a perdu
+    // son observateur ou s'il doit attendre son temps de recharge.
+    const reloading = state.units.some(
+      (u) =>
+        u.alive &&
+        u.faction === faction &&
+        unitDef(u.defId).abilities.includes('artillery') &&
+        (u.abilities.artillery?.charges ?? 0) > 0,
+    );
+    state.events.push({
+      tick: state.tick,
+      type: 'orderRefused',
+      faction,
+      x,
+      y,
+      label: reloading ? 'observateur en recharge' : 'aucun observateur disponible',
+    });
     return false;
   }
 

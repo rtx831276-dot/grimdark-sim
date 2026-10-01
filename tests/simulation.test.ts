@@ -58,6 +58,18 @@ describe('déterminisme', () => {
     runTicks(b, 200);
     expect(hashState(a)).not.toBe(hashState(b));
   });
+
+  it('expose la graine effective : l afficher suffit à rejouer la bataille', () => {
+    const state = createSimulation({ seed: 777, map: VILLAGE_CHURCH });
+    expect(state.seed).toBe(777);
+
+    // C'est la garantie du journal de bord : le nombre affiché comme « graine » rejoue,
+    // contrairement à `rng.snapshot()`, qui est l'état interne après consommation.
+    const replay = createSimulation({ seed: state.seed, map: VILLAGE_CHURCH });
+    runTicks(state, 300);
+    runTicks(replay, 300);
+    expect(hashState(replay)).toBe(hashState(state));
+  });
 });
 
 describe('ordres', () => {
@@ -128,6 +140,40 @@ describe('ordres', () => {
     const observer = find(state, 'marteau', 'observateur');
     observer.alive = false;
     expect(issueOrder(state, { type: 'artillery', faction: 'marteau', x: 5, y: 3 })).toBe(false);
+  });
+
+  it('oppose le temps de recharge de l observateur au joueur comme à l IA', () => {
+    const state = createSimulation({ seed: 5, map: VILLAGE_CHURCH });
+    const observer = find(state, 'marteau', 'observateur');
+    const barrages = state.factions.marteau!.barrages;
+
+    expect(issueOrder(state, { type: 'artillery', faction: 'marteau', x: 15.5, y: 20.5 })).toBe(true);
+    expect(observer.abilities.artillery?.cooldown).toBeGreaterThan(0);
+
+    // Deuxième demande dans le même tick : l'observateur souffle, la frappe est refusée
+    // et le barrage rare n'est pas gaspillé.
+    expect(issueOrder(state, { type: 'artillery', faction: 'marteau', x: 16.5, y: 21.5 })).toBe(false);
+    expect(state.factions.marteau?.barrages).toBe(barrages - 1);
+    expect(state.events.some((event) => event.type === 'orderRefused' && event.label === 'observateur en recharge')).toBe(true);
+  });
+
+  it('interrompt le chemin en cours quand on ordonne le repli', () => {
+    const state = createSimulation({ seed: 777, map: VILLAGE_CHURCH });
+    runTicks(state, 40);
+    const unit = state.units.find((candidate) => candidate.alive && candidate.path.length > 1 && candidate.stance === 'advance');
+    expect(unit).toBeDefined();
+
+    const line = VILLAGE_CHURCH.fallbackLine[unit!.faction];
+    const distanceBefore = Math.hypot(unit!.x - line.x, unit!.y - line.y);
+    expect(issueOrder(state, { type: 'fallback', units: [unit!.id] })).toBe(true);
+
+    // Le bug d'origine : le chemin vers l'objectif survivait à l'ordre de repli, et l'unité
+    // finissait son avance avant de se replier.
+    expect(unit!.path).toHaveLength(0);
+    expect(unit!.pathGoal).toBeNull();
+
+    runTicks(state, 10);
+    expect(Math.hypot(unit!.x - line.x, unit!.y - line.y)).toBeLessThan(distanceBefore);
   });
 });
 

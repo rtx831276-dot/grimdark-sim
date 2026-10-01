@@ -186,6 +186,12 @@ export interface SimStats {
 export interface SimState {
   tick: number;
   elapsed: number;
+  /**
+   * Graine effective de la bataille. C'est la seule valeur à afficher ou à consigner comme
+   * « graine » : la ressemer rejoue exactement la même bataille. `rng.snapshot()` renvoie
+   * l'état interne du générateur après consommation et ne rejoue rien.
+   */
+  seed: number;
   map: GameMap;
   units: Unit[];
   projectiles: Projectile[];

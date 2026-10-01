@@ -8,6 +8,7 @@ import {
   useRally,
 } from '../src/sim/morale';
 import { unitDef } from '../src/data/units';
+import { useCharge } from '../src/sim/abilities';
 import { createSimulation } from '../src/sim/simulation';
 import type { SimState, Unit } from '../src/sim/types';
 import { TEST_MAP } from './fixtures/test-map';
@@ -40,6 +41,19 @@ describe('suppression', () => {
     for (let i = 0; i < 200; i++) updateMorale(state, victim, 0.1);
     expect(victim.suppression).toBeLessThan(SUPPRESSION_PINNED);
     expect(victim.state).toBe('idle');
+  });
+
+  it('ne cloue pas une unité en pleine charge fanatique', () => {
+    const state = setUp();
+    const flagellant = find(state, 'penitents', 'flagellant');
+    expect(useCharge(state, flagellant)).toBe(true);
+    expect(flagellant.chargeTicks).toBeGreaterThan(0);
+
+    addSuppression(state, flagellant, 200);
+
+    // Doctrine : huit secondes d'assaut presque impossible à arrêter (docs/GAME_DESIGN.md).
+    expect(flagellant.suppression).toBe(0);
+    expect(flagellant.state).not.toBe('pinned');
   });
 
   it('respecte la discipline : une sentinelle mécanisée encaisse sans se clouer', () => {

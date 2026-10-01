@@ -27,6 +27,9 @@ export function applyMoraleShock(state: SimState, unit: Unit, amount: number, la
 /** Ajoute de la suppression (balles qui claquent autour, explosions proches). */
 export function addSuppression(state: SimState, unit: Unit, amount: number): void {
   if (!unit.alive) return;
+  // Fureur de charge : la doctrine promet un assaut de huit secondes presque impossible à
+  // arrêter (docs/GAME_DESIGN.md). Sans ce garde, un tir nourri cloue l'unité en pleine charge.
+  if (unit.chargeTicks > 0) return;
   const def = unitDef(unit.defId);
   const cap = def.traits.includes('mechanical') ? 40 : 100;
   const resistance = clamp(1 - def.discipline * 0.5, 0.25, 1);

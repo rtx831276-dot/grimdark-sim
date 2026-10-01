@@ -54,6 +54,7 @@ export function createSimulation(options: SimulationOptions = {}): SimState {
   const state: SimState = {
     tick: 0,
     elapsed: 0,
+    seed,
     map,
     units: [],
     projectiles: [],
@@ -351,6 +352,12 @@ export function issueOrder(state: SimState, order: Order): boolean {
       for (const unit of selectUnits(state, order.units)) {
         if (unit.state === 'broken') continue;
         unit.stance = 'advance';
+        unit.goal = null;
+        unit.nextRepathTick = 0;
+        // Changer de posture annule le chemin en cours : sans cela, une unité en repli
+        // finit d'abord de reculer avant d'obéir à l'ordre d'assaut.
+        unit.path = [];
+        unit.pathGoal = null;
         accepted++;
       }
       return accepted > 0;
@@ -364,6 +371,10 @@ export function issueOrder(state: SimState, order: Order): boolean {
         unit.goal = null;
         unit.forcedTargetId = null;
         unit.nextRepathTick = 0;
+        // Le chemin en cours est abandonné : sinon l'unité finit son avance vers l'objectif,
+        // souvent sous le feu, avant de daigner se replier.
+        unit.path = [];
+        unit.pathGoal = null;
         accepted++;
       }
       return accepted > 0;

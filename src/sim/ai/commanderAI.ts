@@ -1,6 +1,7 @@
 import { distance } from '../../core/math';
 import type { Vec2 } from '../../core/ids';
 import type { ObjectiveDef } from '../../data/map-types';
+import { artilleryReady } from '../abilities';
 import { lineOfSight } from '../los';
 import { bestObjectiveFor } from '../map';
 import type { SimState, Unit } from '../types';
@@ -78,8 +79,8 @@ export function enemyConcentration(state: SimState, faction: string): Vec2 | nul
  * de barrage disponible.
  */
 export function commanderFireSupportTarget(state: SimState, unit: Unit): Vec2 | null {
-  const slot = unit.abilities.artillery;
-  if (!slot || slot.charges <= 0 || slot.cooldown > 0) return null;
+  // Même règle que pour le joueur : charges restantes et pas de recharge en cours.
+  if (!artilleryReady(unit)) return null;
   if (unit.suppression >= 45) return null; // un observateur sous le feu ne désigne rien
 
   const runtime = state.factions[unit.faction];
