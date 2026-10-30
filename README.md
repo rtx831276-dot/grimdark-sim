@@ -1,3 +1,52 @@
+# Opération Carrefour — bataille tactique moderne sans fin
+
+Deux forces fictives se battent sur la carte délimitée d’Opération Carrefour.
+**La bataille est sans fin**, pas la carte : aucune victoire automatique, et les
+combattants morts ou ayant fui sont remplacés après 10 secondes de simulation.
+Les renforts sont illimités. Les cadavres restent visibles 15 secondes avant d'être
+retirés pour limiter l'utilisation de mémoire ; les nouveaux soldats ont un
+identifiant et un équipement neufs.
+
+Les camps disposent de combattants à mains nues, de porteurs de lame, de pistolets,
+de fusils et de grenadiers, plus un chef et un médecin. Les quatre modèles d'armes
+Meshy sont intégrés. La lame utilise des frappes synchronisées et une zone de contact
+tactique ; les tirs utilisent précision, portée, ligne de vue et rechargement (les
+munitions ne sont pas limitées). Une grenade peut toucher les alliés. Voir
+`src/assets/weapons/README.md` pour les modèles et leurs limites.
+
+Sélectionnez des soldats au clic gauche (ou avec un cadre), donnez un ordre au clic
+droit et appuyez sur **Espace** pour démarrer. Pour lancer une grenade, sélectionnez
+un grenadier, appuyez sur **G** ou cliquez sur **Grenade**, puis visez au clic gauche.
+Le bouton **Nouvelle bataille** redémarre la partie. La pause fige la simulation et
+les délais de réapparition.
+
+La vue 3D dispose d'une caméra pivotante (**X / V** ou ⟲ / ⟳) et de ragdolls ;
+la vue 2D sert aussi de secours. Pas de véhicules, multijoueur ou contrôle direct.
+Les modèles et leur placement ont été contrôlés dans Chromium sans interface ; ils n'ont pas été vérifiés dans Brave.
+
+### Communications tactiques
+
+Les soldats communiquent par bulles de texte et dans le journal : ils signalent un ennemi visible ou demandent du renfort lorsqu'ils sont blessés. Les alliés proches présents au moment de l'appel peuvent utiliser l'information pendant quelques secondes. Les ordres du joueur, tenir et repli restent prioritaires. Il n'y a pas encore de voix ni de dialogue libre.
+
+### Rôles dans la mission
+
+Chaque camp commence avec 13 combattants : un chef, trois combattants à mains
+nues, deux à la lame, trois fusiliers, deux porteurs de pistolet, un grenadier et
+un médecin. Le médecin soigne les vivants mais ne ressuscite pas les morts.
+
+### Jouer sans serveur
+
+```bash
+npm install
+npm run build:offline
+```
+
+Ouvrir ensuite `dist/operation-carrefour.html` dans un navigateur sur ordinateur. La souris et le clavier sont nécessaires. Le fichier est autonome et n’a pas besoin d’une connexion Internet.
+
+---
+
+## Documentation du prototype d’origine
+
 # grimdark-sim — v0 « Le Hameau de la Cloche »
 
 Prototype jouable d'un **simulateur de guerre tactique isométrique 2.5D grimdark** :
@@ -50,6 +99,8 @@ npm run dev -- --host  # accessible depuis une autre machine
 ```
 
 Puis ouvrir l'URL affichée (par défaut <http://localhost:5183>).
+La bataille commence en pause : sélectionnez des soldats et appuyez sur Espace pour lancer le combat. Les déplacements de groupe répartissent les soldats autour du point choisi.
+
 La graine est fixe (20261001) : la même bataille se rejoue à l'identique à chaque
 rechargement. Le bouton **Nouvelle bataille** tire une graine aléatoire.
 
@@ -135,3 +186,25 @@ et une base saine**, pas un jeu fini. Voir le ROADMAP pour la suite.
 ## Licence
 
 Projet privé, licence non définie à ce stade.
+
+### Mode FPS (prototype)
+
+Sélectionner un soldat puis cliquer **Mode FPS** ; sans sélection, un fusilier Aegis est choisi. Le champ de bataille et le soldat sont les mêmes qu'en mode tactique. Autoriser la capture de la souris : **ZQSD/WASD** pour bouger, souris pour viser, clic gauche pour tirer ou frapper, clic droit maintenu pour le zoom avec une arme à feu, **R** pour recharger, **Espace** pour pause. **Échap** libère la souris et met la partie en pause ; cliquer sur le terrain recapture la souris, ou cliquer **Quitter FPS** pour revenir à la vue tactique. Si le soldat meurt ou fuit, retour automatique en vue tactique et pause ; sélectionner un autre soldat pour reprendre. Le chargeur est affiché en cartouches, avec une réserve illimitée ; le fusil tire toujours trois cartouches par salve. La recharge reste automatique en plus de R.
+
+Le FPS utilise la grille et les règles tactiques existantes : obstacles et portée bloquent le tir ; un allié dans le viseur bloque la cible sans subir de tir allié. La précision, la couverture et les dégâts restent ceux de la simulation, donc un ennemi dans le viseur ne garantit pas un impact. Il s'agit d'un prototype : les projectiles ne sont pas balistiques et la vue de l'arme n'a pas encore de bras dédiés.
+
+L'interface FPS affiche la vie, les cartouches restantes et la progression de recharge. Une croix apparaît seulement quand une attaque du joueur touche réellement (rouge pour une élimination) ; une vignette rouge indique une perte de vie, y compris par explosion. Ces effets sont visuels et ne changent pas les dégâts.
+
+### Collisions et chutes
+
+Les soldats occupent un disque de collision : en vue tactique comme en FPS, ils glissent le long des obstacles sans traverser leurs coins, et les bousculades ne les poussent plus dans les murs. Les chemins et esquives tiennent compte de ce rayon. Les explosions projettent visuellement les corps depuis leur point d'impact, avec une impulsion verticale limitée ; coudes et genoux ont des limites articulaires plus serrées. Le ragdoll reste purement visuel et ne bloque pas les vivants ; il est figé après cinq secondes pour limiter le coût.
+
+### Trajectoire des grenades
+
+Les grenades suivent un arc calculé par la simulation, avec gravité et rebonds amortis sur le sol et les obstacles. Elles peuvent franchir un obstacle assez bas ; un mur trop haut peut les renvoyer vers le lanceur. Elles explosent à leur position réelle à la fin de la mèche, même après un rebond : attention aux alliés. Le rendu 2D et 3D suit la même trajectoire. Les obus d'artillerie conservent leur fonctionnement antérieur.
+
+Le zoom FPS est optique : il ne change pas la probabilité de toucher, qui reste régie par la simulation tactique. Le recul, le mouvement de l'arme et le geste de recharge sont visuels ; ils ne déplacent pas le viseur. R peut démarrer une recharge dès la fin d'une salve, sans attendre le délai entre deux tirs.
+
+### Créature indépendante
+
+La bataille sans fin accueille une créature hostile aux deux camps : elle poursuit le soldat visible le plus proche et frappe au contact. Elle peut être blessée et tuée comme les autres unités, puis réapparaît après 10 secondes de simulation. Elle ne capture pas les objectifs et ne reçoit pas d’ordres. Le modèle fourni ne contient aucun clip d’animation : les oscillations et les attaques sont représentées par un mouvement simple de tout le modèle, sans animation des pattes ni ragdoll dédié. Les collisions restent approximatives.

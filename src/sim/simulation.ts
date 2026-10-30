@@ -8,7 +8,12 @@ import { unitDef } from '../data/units';
 import { weapon } from '../data/weapons';
 import { callArtilleryStrike, updateAbilityCooldowns, useGrenade } from './abilities';
 import { updateAi } from './ai/index';
+import { updateMeleeDodges } from './ai/meleeDodge';
+import { updateMeleeAttacks } from './combat';
+import { updateDirectControl, type DirectControl } from './direct-control';
+import { updateCommunications } from './ai/communications';
 import { detonate } from './explosion';
+import { advanceGrenade } from './grenade-physics';
 import { compileMap, inBounds, isSolid, nearestWalkable, tileAtFloor } from './map';
 import { isEffective, updateMorale, useRally } from './morale';
 import { separateUnits } from './movement';
@@ -25,6 +30,8 @@ export interface SimulationOptions {
   map?: MapDefinition;
   /** Nombre de barrages par faction (par défaut BARRAGES_PER_FACTION). */
   barrages?: number;
+  /** Désactive les renforts du scénario si faux. */
+  respawns?: boolean;
 }
 
 /* ------------------------------------------------------------------ *
@@ -56,9 +63,16 @@ export function createSimulation(options: SimulationOptions = {}): SimState {
     elapsed: 0,
     seed,
     map,
+    respawn: options.respawns !== false && mapDef.respawn ? {
+      delayTicks: mapDef.respawn.delayTicks,
+      unlimited: mapDef.respawn.unlimited ?? false,
+      reserves: Object.fromEntries(FACTION_IDS.map(id => [id, mapDef.respawn!.reservesPerFaction])),
+      pending: [],
+    } : null,
     units: [],
     projectiles: [],
     events: [],
+    communications: { reports: [], nextSpeakerTick: {}, nextFactionTick: Object.fromEntries(FACTION_IDS.map((id) => [id, 0])) },
     factions,
     objectiveControl: {},
     over: null,
@@ -72,6 +86,11 @@ export function createSimulation(options: SimulationOptions = {}): SimState {
   for (const objective of map.objectives) state.objectiveControl[objective.id] = null;
 
   deployArmies(state, rng);
+  // La menace indépendante n'apparaît que dans le scénario infini.
+  if (mapDef.id === 'carrefour-infini') {
+    const point = nearestWalkable(map, 23, 17, 12);
+    if (point) state.units.push(createUnit(state, 'creature', 'creature', point.x, point.y, factionDef('creature').color));
+  }
   refreshRuntimes(state);
   return state;
 }
@@ -81,7 +100,7 @@ function deployArmies(state: SimState, rng: Rng): void {
     const def = factionDef(factionId);
     const zone = state.map.def.deployment[factionId] ?? def.deployment;
     const roster: string[] = [];
-    for (const entry of def.roster) {
+    for (const entry of state.map.def.rosters?.[factionId] ?? def.roster) {
       for (let i = 0; i < entry.count; i++) roster.push(entry.unit);
     }
     const slots = deploymentSlots(state.map, zone, roster.length, rng);
@@ -137,6 +156,7 @@ function createUnit(state: SimState, faction: FactionId, defId: string, x: numbe
     state: 'idle',
     stance: 'advance',
     alive: true,
+    removedTick: null,
     targetId: null,
     goal: null,
     forcedTargetId: null,
@@ -145,6 +165,10 @@ function createUnit(state: SimState, faction: FactionId, defId: string, x: numbe
     pathGoal: null,
     nextRepathTick: 0,
     cooldown: state.rng.range(0, 1.2),
+    meleeAttack: null,
+    meleeDodge: null,
+    nextDodgeTick: 0,
+    deathImpulse: null,
     salvosLeft: weapon(def.weapon).reloadEvery || Number.MAX_SAFE_INTEGER,
     reloading: false,
     burstLeft: 0,
@@ -168,7 +192,7 @@ function createUnit(state: SimState, faction: FactionId, defId: string, x: numbe
  * ------------------------------------------------------------------ */
 
 /** Avance la simulation d'un pas fixe. Retourne les événements produits par ce tick. */
-export function stepSimulation(state: SimState, dt: number = SIM_DT): SimEvent[] {
+export function stepSimulation(state: SimState, dt: number = SIM_DT, direct?: DirectControl): SimEvent[] {
   state.events.length = 0;
   if (state.over) return state.events;
 
@@ -185,8 +209,22 @@ export function stepSimulation(state: SimState, dt: number = SIM_DT): SimEvent[]
     updateMorale(state, unit, dt);
   }
 
-  updateAi(state, dt);
+  // En mode sans fin, éliminer les anciens cadavres et références pour borner la mémoire.
+  if (state.map.def.endlessBattle) {
+    const expired = state.units.filter(unit => !unit.alive && unit.removedTick !== null && state.tick - unit.removedTick >= 150);
+    if (expired.length) {
+      const ids = new Set(expired.map(unit => unit.id));
+      state.units = state.units.filter(unit => !ids.has(unit.id));
+      for (const id of ids) delete state.communications.nextSpeakerTick[id];
+    }
+  }
+  updateRespawns(state);
+  updateCommunications(state);
+  updateAi(state, dt, direct?.unitId);
+  if (direct) updateDirectControl(state, direct, dt);
+  updateMeleeDodges(state, direct?.unitId);
   separateUnits(state, dt);
+  updateMeleeAttacks(state);
   updateProjectiles(state);
   updateObjectives(state);
   if (state.tick % TICKS_PER_SECOND === 0) refreshRuntimes(state);
@@ -195,16 +233,50 @@ export function stepSimulation(state: SimState, dt: number = SIM_DT): SimEvent[]
   return state.events;
 }
 
+/** Crée une nouvelle unité sans réutiliser le cadavre ni son identifiant. */
+function updateRespawns(state: SimState): void {
+  const respawn = state.respawn;
+  if (!respawn) return;
+  const remaining: typeof respawn.pending = [];
+  for (const entry of respawn.pending) {
+    if (entry.atTick > state.tick) { remaining.push(entry); continue; }
+    const zone = state.map.def.deployment[entry.faction] ?? factionDef(entry.faction).deployment;
+    const candidates: Vec2[] = [];
+    for (let y = zone.y; y < zone.y + zone.h; y++) for (let x = zone.x; x < zone.x + zone.w; x++) {
+      if (!isSolid(state.map, x + 0.5, y + 0.5)) candidates.push({ x: x + 0.5, y: y + 0.5 });
+    }
+    if (!candidates.length) {
+      const fallback = nearestWalkable(state.map, zone.x + zone.w / 2, zone.y + zone.h / 2, 12);
+      if (fallback) candidates.push(fallback);
+    }
+    if (!candidates.length) { remaining.push(entry); continue; }
+    // Privilégier une place libre, loin des soldats, avec départage stable.
+    const living = state.units.filter(unit => unit.alive);
+    const clearance = (pos: Vec2): number => living.reduce((best, unit) => Math.min(best, Math.hypot(unit.x - pos.x, unit.y - pos.y)), Infinity);
+    candidates.sort((a, b) => clearance(b) - clearance(a) || a.y - b.y || a.x - b.x);
+    const point = candidates[0]!;
+    const unit = createUnit(state, entry.faction, entry.defId, point.x, point.y, factionDef(entry.faction).color);
+    state.units.push(unit);
+    state.events.push({ tick: state.tick, type: 'respawn', unitId: unit.id, faction: unit.faction, x: unit.x, y: unit.y, label: unitDef(unit.defId).label });
+  }
+  respawn.pending = remaining;
+}
+
 function updateProjectiles(state: SimState): void {
   if (state.projectiles.length === 0) return;
   const alive: Projectile[] = [];
   for (const projectile of state.projectiles) {
     const start = projectile.impactTick - projectile.flightTicks;
     const t = clamp((state.tick - start) / Math.max(1, projectile.flightTicks), 0, 1);
-    projectile.x = projectile.fromX + (projectile.tx - projectile.fromX) * t;
-    projectile.y = projectile.fromY + (projectile.ty - projectile.fromY) * t;
+    if (projectile.kind === 'grenade' && projectile.grenadeMotion) advanceGrenade(state.map, projectile, SIM_DT);
+    else {
+      projectile.x = projectile.fromX + (projectile.tx - projectile.fromX) * t;
+      projectile.y = projectile.fromY + (projectile.ty - projectile.fromY) * t;
+    }
     if (state.tick >= projectile.impactTick) {
-      detonate(state, projectile.tx, projectile.ty, weapon(projectile.weaponId), projectile.faction, projectile.ownerId);
+      const x = projectile.kind === 'grenade' && projectile.grenadeMotion ? projectile.x : projectile.tx;
+      const y = projectile.kind === 'grenade' && projectile.grenadeMotion ? projectile.y : projectile.ty;
+      detonate(state, x, y, weapon(projectile.weaponId), projectile.faction, projectile.ownerId);
     } else {
       alive.push(projectile);
     }
@@ -220,7 +292,7 @@ function updateObjectives(state: SimState): void {
   for (const objective of state.map.objectives) {
     const counts = new Map<FactionId, number>();
     for (const unit of state.units) {
-      if (!isEffective(unit)) continue;
+      if (!isEffective(unit) || unit.faction === 'creature') continue;
       if (Math.hypot(unit.x - objective.x, unit.y - objective.y) > objective.radius) continue;
       counts.set(unit.faction, (counts.get(unit.faction) ?? 0) + 1);
     }
@@ -276,8 +348,8 @@ export function refreshRuntimes(state: SimState): void {
 }
 
 function checkVictory(state: SimState): void {
-  if (state.over) return;
-  const counts = FACTION_IDS.map((id) => effectiveUnits(state, id).length);
+  if (state.over || state.map.def.endlessBattle) return;
+  const counts = FACTION_IDS.map((id) => effectiveUnits(state, id).length + (state.respawn?.pending.filter(entry => entry.faction === id).length ?? 0));
   const total = counts.reduce((sum, count) => sum + count, 0);
   if (total === 0) {
     state.over = { winner: null, reason: 'Les deux camps ont cessé le combat.' };
@@ -302,12 +374,18 @@ export function issueOrder(state: SimState, order: Order): boolean {
   switch (order.type) {
     case 'move': {
       let accepted = 0;
-      for (const unit of selectUnits(state, order.units)) {
+      const units = [...new Map(selectUnits(state, order.units).map((unit) => [unit.id, unit])).values()];
+      const destinations = formationDestinations(state.map, units.filter((unit) => unit.state !== 'broken'), order.x, order.y);
+      for (const unit of units) {
         if (unit.state === 'broken') {
           state.events.push({ tick: state.tick, type: 'orderRefused', unitId: unit.id, faction: unit.faction, x: unit.x, y: unit.y, label: 'unité démoralisée' });
           continue;
         }
-        unit.goal = { x: order.x, y: order.y };
+        const destination = destinations.get(unit.id);
+        if (!destination) continue;
+        unit.meleeAttack = null;
+        unit.meleeDodge = null;
+        unit.goal = destination;
         unit.forcedTargetId = null;
         unit.stance = 'advance';
         unit.nextRepathTick = 0;
@@ -320,13 +398,18 @@ export function issueOrder(state: SimState, order: Order): boolean {
     }
 
     case 'attack': {
-      const target = state.units[order.target - 1];
+      const target = state.units.find(unit => unit.id === order.target);
       if (!target || !target.alive) return false;
       let accepted = 0;
       for (const unit of selectUnits(state, order.units)) {
         if (unit.state === 'broken' || unit.faction === target.faction) continue;
+        unit.meleeAttack = null;
+        unit.meleeDodge = null;
         unit.forcedTargetId = target.id;
         unit.goal = null;
+        unit.path = [];
+        unit.pathIndex = 0;
+        unit.pathGoal = null;
         unit.nextRepathTick = 0;
         accepted++;
       }
@@ -337,6 +420,8 @@ export function issueOrder(state: SimState, order: Order): boolean {
       let accepted = 0;
       for (const unit of selectUnits(state, order.units)) {
         if (unit.state === 'broken') continue;
+        unit.meleeAttack = null;
+        unit.meleeDodge = null;
         unit.stance = 'hold';
         unit.goal = null;
         unit.forcedTargetId = null;
@@ -351,6 +436,7 @@ export function issueOrder(state: SimState, order: Order): boolean {
       let accepted = 0;
       for (const unit of selectUnits(state, order.units)) {
         if (unit.state === 'broken') continue;
+        unit.meleeDodge = null;
         unit.stance = 'advance';
         unit.goal = null;
         unit.nextRepathTick = 0;
@@ -367,6 +453,8 @@ export function issueOrder(state: SimState, order: Order): boolean {
       let accepted = 0;
       for (const unit of selectUnits(state, order.units)) {
         if (!unit.alive) continue;
+        unit.meleeAttack = null;
+        unit.meleeDodge = null;
         unit.stance = 'fallback';
         unit.goal = null;
         unit.forcedTargetId = null;
@@ -408,11 +496,49 @@ export function issueOrder(state: SimState, order: Order): boolean {
   }
 }
 
+/** Répartit un groupe sur des tuiles distinctes proches du point demandé. */
+function formationDestinations(map: GameMap, units: Unit[], x: number, y: number): Map<number, Vec2> {
+  const result = new Map<number, Vec2>();
+  if (units.length === 1) {
+    result.set(units[0]!.id, { x, y });
+    return result;
+  }
+  // Les cases les plus proches de la cible sont prioritaires ; l'identifiant sert
+  // de départage déterministe pour ne pas dépendre de l'ordre de sélection.
+  const slots: Vec2[] = [];
+  const cx = Math.floor(x);
+  const cy = Math.floor(y);
+  const radiusLimit = Math.max(map.width, map.height);
+  for (let radius = 0; radius <= radiusLimit && slots.length < units.length; radius++) {
+    const ring: Vec2[] = [];
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius || isSolid(map, cx + dx, cy + dy)) continue;
+        ring.push({ x: cx + dx + 0.5, y: cy + dy + 0.5 });
+      }
+    }
+    ring.sort((a, b) => Math.hypot(a.x - x, a.y - y) - Math.hypot(b.x - x, b.y - y) || a.y - b.y || a.x - b.x);
+    slots.push(...ring);
+  }
+  const remaining = [...units].sort((a, b) => a.id - b.id);
+  for (const slot of slots.slice(0, units.length)) {
+    let closest = 0;
+    for (let i = 1; i < remaining.length; i++) {
+      const candidate = remaining[i]!;
+      const best = remaining[closest]!;
+      if (Math.hypot(candidate.x - slot.x, candidate.y - slot.y) < Math.hypot(best.x - slot.x, best.y - slot.y)) closest = i;
+    }
+    const [unit] = remaining.splice(closest, 1);
+    if (unit) result.set(unit.id, slot);
+  }
+  return result;
+}
+
 function selectUnits(state: SimState, ids: number[]): Unit[] {
   const selected: Unit[] = [];
   for (const id of ids) {
-    const unit = state.units[id - 1];
-    if (unit && unit.alive) selected.push(unit);
+    const unit = state.units.find(candidate => candidate.id === id);
+    if (unit && unit.alive && unit.faction !== 'creature') selected.push(unit);
   }
   return selected;
 }
@@ -444,6 +570,10 @@ export function unitAt(state: SimState, x: number, y: number): Unit | null {
  */
 export function hashState(state: SimState): number {
   const parts: number[] = [state.tick, state.units.length, state.projectiles.length, state.stats.kills, Math.round(state.stats.damage)];
+  if (state.respawn) {
+    for (const id of FACTION_IDS) parts.push(state.respawn.reserves[id] ?? 0);
+    for (const entry of state.respawn.pending) parts.push(hashString(entry.faction), hashString(entry.defId), entry.atTick);
+  }
   for (const unit of state.units) {
     parts.push(
       unit.id,
@@ -453,7 +583,24 @@ export function hashState(state: SimState): number {
       Math.round(unit.y * 100),
       Math.round(unit.morale * 10),
       Math.round(unit.suppression * 10),
+      unit.meleeAttack?.targetId ?? 0,
+      unit.meleeAttack ? hashString(unit.meleeAttack.clip) : 0,
+      Math.round((unit.meleeAttack?.facing ?? 0) * 1000),
+      unit.meleeAttack?.endTick ?? 0,
+      unit.meleeAttack?.startTick ?? 0,
+      unit.meleeAttack?.impactTick ?? 0,
+      unit.meleeAttack?.resolved ? 1 : 0,
+      unit.meleeDodge?.startTick ?? 0,
+      unit.meleeDodge ? hashString(unit.meleeDodge.clip) : 0,
+      unit.nextDodgeTick,
     );
+  }
+  for (const projectile of state.projectiles) {
+    const m = projectile.grenadeMotion;
+    parts.push(projectile.id, hashString(projectile.kind), projectile.impactTick,
+      Math.round(projectile.x * 1000), Math.round(projectile.y * 1000),
+      Math.round((m?.height ?? 0) * 1000), Math.round((m?.velocityX ?? 0) * 1000),
+      Math.round((m?.velocityY ?? 0) * 1000), Math.round((m?.velocityHeight ?? 0) * 1000), m?.bounces ?? 0);
   }
   for (const tile of state.map.tiles) {
     if (tile.hp !== tile.maxHp) parts.push(Math.round(tile.hp));

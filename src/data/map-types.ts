@@ -47,6 +47,14 @@ export interface MapDefinition {
   };
   objectives: ObjectiveDef[];
   deployment: Record<FactionId, DeploymentZone>;
+  /** Renforts limités par faction et délai en ticks ; absent = pas de respawn. */
+  respawn?: { reservesPerFaction: number; delayTicks: number; unlimited?: boolean };
+  /** La bataille continue sans condition d’élimination. */
+  endlessBattle?: boolean;
+  /** Autorise les signalements tactiques entre alliés dans ce scénario. */
+  tacticalCommunications?: boolean;
+  /** Composition propre au scénario ; sinon les effectifs par défaut des factions sont utilisés. */
+  rosters?: Partial<Record<FactionId, Array<{ unit: string; count: number }>>>;
   /** Point de ralliement des unités démoralisées (repli), par faction. */
   fallbackLine: Record<FactionId, Vec2>;
 }

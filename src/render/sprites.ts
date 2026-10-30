@@ -1,5 +1,6 @@
 import { factionDef } from '../data/factions';
 import { unitDef } from '../data/units';
+import { weapon } from '../data/weapons';
 import type { Unit } from '../sim';
 import { worldDirectionToScreen } from './iso';
 import type { ScreenPoint } from './iso';
@@ -60,15 +61,16 @@ export function drawUnit(ctx: CanvasRenderingContext2D, unit: Unit, position: Sc
   // Arme : orientée par le cap de l'unité, projetée dans le plan isométrique.
   const direction = worldDirectionToScreen(Math.cos(unit.facing), Math.sin(unit.facing));
   const gun = def.weapon.includes('lmg') || def.weapon.includes('sniper') ? 2.2 : 1.4;
-  ctx.strokeStyle = '#1d1b16';
-  ctx.lineWidth = gun * scale;
+  const melee = weapon(def.weapon).kind === 'melee';
+  ctx.strokeStyle = melee ? shade(bodyColor, 1.3) : '#1d1b16';
+  ctx.lineWidth = (melee ? 2.4 : gun) * scale;
   ctx.beginPath();
   ctx.moveTo(x + direction.x * radius * 0.2, y - radius * 0.5 + direction.y * radius * 0.2);
-  ctx.lineTo(x + direction.x * radius * 1.6, y - radius * 0.5 + direction.y * radius * 1.6);
+  ctx.lineTo(x + direction.x * radius * (melee ? (unit.burstLeft > 0 ? 1.4 : 0.7) : 1.6), y - radius * 0.5 + direction.y * radius * (melee ? (unit.burstLeft > 0 ? 1.4 : 0.7) : 1.6));
   ctx.stroke();
 
   // Flash de tir : l'unité vient de lâcher une salve.
-  if (unit.burstLeft > 0) {
+  if (unit.burstLeft > 0 && !melee) {
     ctx.fillStyle = 'rgba(255, 226, 140, 0.85)';
     ctx.beginPath();
     ctx.arc(x + direction.x * radius * 1.9, y - radius * 0.5 + direction.y * radius * 1.9, 2.4 * scale, 0, Math.PI * 2);
@@ -155,6 +157,15 @@ function drawStatusBars(ctx: CanvasRenderingContext2D, unit: Unit, x: number, y:
   if (unit.suppression > 15 && scale > 0.7) {
     ctx.fillStyle = '#e0c341';
     ctx.fillRect(x - width / 2, y + height + 4, width * (unit.suppression / 100), 1.6 * scale);
+  }
+  const badge = unitDef(unit.defId).roleBadge;
+  if (badge && scale >= 0.65) {
+    ctx.font = 'bold 10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(15, 18, 17, 0.8)';
+    ctx.fillRect(x + width / 2 + 2, y - 5, 13, 13);
+    ctx.fillStyle = badge === '+' ? '#8fe5a1' : '#e8e2cf';
+    ctx.fillText(badge, x + width / 2 + 8.5, y + 5);
   }
 }
 

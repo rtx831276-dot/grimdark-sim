@@ -1,7 +1,7 @@
 import { factionDef, FACTION_IDS } from '../data/factions';
 import { unitDef } from '../data/units';
 import { weapon } from '../data/weapons';
-import type { SimEvent, SimState, Unit } from '../sim';
+import { meleeMove, type SimEvent, type SimState, type Unit } from '../sim';
 import type { ControlMode } from '../input/controls';
 
 export interface HudCallbacks {
@@ -10,15 +10,21 @@ export interface HudCallbacks {
   onStanceOrder(stance: 'advance' | 'hold' | 'fallback'): void;
   onRallyOrder(): void;
   onModeChange(mode: ControlMode): void;
-  onToggleFlag(flag: 'cover' | 'los' | 'paths'): void;
+  onToggleFlag(flag: 'cover' | 'los' | 'paths' | 'hitboxes'): void;
   onNewBattle(): void;
+  onToggleView(): void;
+  onRotateView(direction: number): void;
+  onToggleFps(): void;
 }
 
 export interface HudState {
   speed: number;
   paused: boolean;
+  view3d: boolean;
+  threeAvailable: boolean;
+  fps: boolean;
   mode: ControlMode;
-  flags: { cover: boolean; los: boolean; paths: boolean };
+  flags: { cover: boolean; los: boolean; paths: boolean; hitboxes: boolean };
 }
 
 const MAX_LOG_LINES = 9;
@@ -84,7 +90,16 @@ export class Hud {
             this.callbacks.onModeChange(value as ControlMode);
             break;
           case 'flag':
-            this.callbacks.onToggleFlag(value as 'cover' | 'los' | 'paths');
+            this.callbacks.onToggleFlag(value as 'cover' | 'los' | 'paths' | 'hitboxes');
+            break;
+          case 'rotate':
+            this.callbacks.onRotateView(Number(value));
+            break;
+          case 'toggleView':
+            this.callbacks.onToggleView();
+            break;
+          case 'fps':
+            this.callbacks.onToggleFps();
             break;
           case 'newBattle':
             this.callbacks.onNewBattle();
@@ -112,8 +127,8 @@ export class Hud {
           <dt>Moral</dt><dd data-stat="morale">—</dd>
           <dt>Objectifs</dt><dd data-stat="objectives">—</dd>
           <dt>Morts</dt><dd data-stat="casualties">—</dd>
+          <dt>Renforts</dt><dd data-stat="reserves">—</dd>
           <dt>Fuyards</dt><dd data-stat="fled">—</dd>
-          <dt>Barrages</dt><dd data-stat="barrages">—</dd>
         </dl>`;
       this.scoreboard.appendChild(card);
       for (const stat of card.querySelectorAll<HTMLElement>('[data-stat]')) {
@@ -136,6 +151,8 @@ export class Hud {
       this.setStat(factionId, 'morale', `${runtime.avgMorale.toFixed(0)} %`);
       this.setStat(factionId, 'objectives', `${runtime.objectivesHeld} (score ${runtime.score})`);
       this.setStat(factionId, 'casualties', String(runtime.casualties));
+      const queued = state.respawn?.pending.filter(entry => entry.faction === factionId).length ?? 0;
+      this.setStat(factionId, 'reserves', state.respawn ? `${state.respawn.unlimited ? '∞' : state.respawn.reserves[factionId] ?? 0} (+${queued} en route)` : '—');
       this.setStat(factionId, 'fled', String(runtime.fled));
       this.setStat(factionId, 'barrages', String(runtime.barrages));
     }
@@ -166,7 +183,8 @@ export class Hud {
         .map((ability) => {
           const slot = unit.abilities[ability];
           const charges = slot ? slot.charges : 0;
-          return `<span class="chip ${charges > 0 ? '' : 'spent'}">${abilityLabel(ability)} ${charges}</span>`;
+          const cooldown = slot && slot.cooldown > 0 ? ` · ${Math.ceil(slot.cooldown)} s` : '';
+          return `<span class="chip ${charges > 0 ? '' : 'spent'}">${abilityLabel(ability)} ${charges}${cooldown}</span>`;
         })
         .join('');
       this.selectionPanel.innerHTML = `
@@ -185,11 +203,16 @@ export class Hud {
           <dl class="unit-stats">
             <dt>État</dt><dd>${stateLabel(unit)}</dd>
             <dt>Intention</dt><dd>${unit.intent}</dd>
+            ${unit.meleeAttack ? `<dt>Technique</dt><dd>${meleeMove(unit.meleeAttack.clip).label}</dd>` : ''}
             <dt>Arme</dt><dd>${gun.label} (${gun.range} tuiles)</dd>
+            <dt>Vitesse</dt><dd>${def.speed.toFixed(1)} tuiles/s</dd>
+            <dt>Protection</dt><dd>${Math.round(def.armor * 100)} %</dd>
+            <dt>Détection</dt><dd>${def.vision} tuiles</dd>
             <dt>Posture</dt><dd>${stanceLabel(unit.stance)}</dd>
             <dt>Kills</dt><dd>${unit.kills}</dd>
           </dl>
           <div class="chips">${abilities || '<span class="chip spent">aucune capacité</span>'}</div>
+          <p class="hint">${def.description}</p>
         </div>`;
       return;
     }
@@ -219,13 +242,23 @@ export class Hud {
     for (const button of this.root.querySelectorAll<HTMLButtonElement>('button[data-action="mode"]')) {
       button.classList.toggle('active', button.dataset.value === hudState.mode);
     }
+    for (const button of this.root.querySelectorAll<HTMLButtonElement>('button[data-action="rotate"]')) {
+      button.disabled = !hudState.view3d;
+    }
+    const view = this.root.querySelector<HTMLButtonElement>('button[data-action="toggleView"]');
+    if (view) {
+      view.textContent = hudState.threeAvailable ? (hudState.view3d ? 'Vue 2D' : 'Vue 3D') : '3D indisponible';
+      view.disabled = !hudState.threeAvailable;
+    }
+    const fps = this.root.querySelector<HTMLButtonElement>('button[data-action="fps"]');
+    if (fps) { fps.textContent = hudState.fps ? 'Quitter FPS' : 'Mode FPS'; fps.disabled = !hudState.threeAvailable; fps.classList.toggle('active', hudState.fps); }
     const pause = this.root.querySelector<HTMLButtonElement>('button[data-action="pause"]');
     if (pause) pause.textContent = hudState.paused ? '▶ Reprendre (Espace)' : '⏸ Pause (Espace)';
   }
 
   private renderFlagButtons(flags: HudState['flags']): void {
     for (const button of this.root.querySelectorAll<HTMLButtonElement>('button[data-action="flag"]')) {
-      const flag = button.dataset.value as 'cover' | 'los' | 'paths';
+      const flag = button.dataset.value as 'cover' | 'los' | 'paths' | 'hitboxes';
       button.classList.toggle('active', flags[flag]);
     }
   }
@@ -259,6 +292,8 @@ export class Hud {
 
 function describeEvent(event: SimEvent): string | null {
   switch (event.type) {
+    case 'respawn':
+      return `${event.faction ? factionDef(event.faction).shortName : 'Allié'} : renfort ${event.label ?? 'combattant'} déployé.`;
     case 'kill':
       return `<span class="bad">mort</span> ${event.label ? factionDef(event.label).shortName : '?'}`;
     case 'broken':
@@ -269,6 +304,10 @@ function describeEvent(event: SimEvent): string | null {
       return `<span class="good">reprise en main</span>`;
     case 'fled':
       return `<span class="bad">fuite hors du champ</span>`;
+    case 'communication':
+      return `<span class="good">${event.faction ? factionDef(event.faction).shortName : 'Allié'}</span> : ${event.label ?? 'Contact !'}`;
+    case 'healed':
+      return `<span class="good">soins</span> +${Math.round(event.amount ?? 0)} vie`;
     case 'rally':
       return `<span class="good">ralliement</span> (${event.label ?? 'officier'})`;
     case 'terrainDestroyed':
@@ -330,6 +369,8 @@ function abilityLabel(ability: string): string {
       return 'Ralliements';
     case 'charge':
       return 'Charges';
+    case 'heal':
+      return 'Soins auto';
     default:
       return ability;
   }

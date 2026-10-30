@@ -23,8 +23,9 @@ export interface ControlsCallbacks {
   onStanceOrder(stance: 'advance' | 'hold' | 'fallback'): void;
   onRallyOrder(): void;
   onTogglePause(): void;
+  onRotateView(direction: number): void;
   onSpeedChange(speed: number): void;
-  onToggleFlag(flag: 'cover' | 'los' | 'paths'): void;
+  onToggleFlag(flag: 'cover' | 'los' | 'paths' | 'hitboxes'): void;
   onHover(tile: Vec2 | null, world: Vec2): void;
 }
 
@@ -38,6 +39,7 @@ export interface ControlsCallbacks {
  */
 export class Controls {
   mode: ControlMode = 'none';
+  private enabled = true;
   selectionRect: { x: number; y: number; w: number; h: number } | null = null;
   pointerWorld: Vec2 = { x: 0, y: 0 };
   hoveredTile: Vec2 | null = null;
@@ -81,14 +83,20 @@ export class Controls {
 
   /** Déplacement clavier de la caméra, appelé à chaque frame. */
   update(dt: number): void {
+    if (!this.enabled) return;
     const step = 700 * dt;
     let dx = 0;
     let dy = 0;
-    if (this.keys.has('keyw') || this.keys.has('arrowup')) dy += step;
+    if (this.keys.has('keyw') || this.keys.has('keyz') || this.keys.has('arrowup')) dy += step;
     if (this.keys.has('keys') || this.keys.has('arrowdown')) dy -= step;
-    if (this.keys.has('keya') || this.keys.has('arrowleft')) dx += step;
+    if (this.keys.has('keya') || this.keys.has('keyq') || this.keys.has('arrowleft')) dx += step;
     if (this.keys.has('keyd') || this.keys.has('arrowright')) dx -= step;
     if (dx !== 0 || dy !== 0) this.camera.panByScreen(dx, dy);
+  }
+
+  setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
+    this.keys.clear(); this.dragging = false; this.panning = false; this.selectionRect = null;
   }
 
   setMode(mode: ControlMode): void {
@@ -109,6 +117,7 @@ export class Controls {
   }
 
   private handleMouseDown = (event: MouseEvent): void => {
+    if (!this.enabled) return;
     this.refreshPointer(event);
     // Clic central : déplacement de la caméra (le clic droit est réservé aux ordres).
     if (event.button === 1) {
@@ -124,6 +133,7 @@ export class Controls {
   };
 
   private handleMouseMove = (event: MouseEvent): void => {
+    if (!this.enabled) return;
     if (this.panning) {
       this.camera.panByScreen(event.clientX - this.panLast.x, event.clientY - this.panLast.y);
       this.panLast = { x: event.clientX, y: event.clientY };
@@ -139,12 +149,14 @@ export class Controls {
   };
 
   private handleMouseUp = (event: MouseEvent): void => {
+    if (!this.enabled) return;
     if (this.panning && event.button === 1) {
       this.panning = false;
       return;
     }
 
     if (event.button === 2) {
+      if (event.target !== this.canvas) return;
       this.refreshPointer(event);
       if (this.mode !== 'none') {
         this.setMode('none');
@@ -154,16 +166,17 @@ export class Controls {
       return;
     }
 
-    if (event.button !== 0) return;
+    // Un clic sur un bouton du HUD ne doit pas sélectionner le terrain en dessous.
+    if (event.button !== 0 || !this.dragging) return;
     this.dragging = false;
 
     if (this.selectionRect) {
       const rect = this.selectionRect;
       this.selectionRect = null;
-      const a = this.camera.screenToWorld(rect.x, rect.y);
-      const b = this.camera.screenToWorld(rect.x + rect.w, rect.y + rect.h);
+      // Le rectangle reste en coordonnées écran : en projection isométrique,
+      // deux coins convertis en monde ne forment pas le rectangle visible.
       this.callbacks.onSelectBox(
-        { minX: Math.min(a.x, b.x), maxX: Math.max(a.x, b.x), minY: Math.min(a.y, b.y), maxY: Math.max(a.y, b.y) },
+        { minX: rect.x, maxX: rect.x + rect.w, minY: rect.y, maxY: rect.y + rect.h },
         event.shiftKey,
       );
       return;
@@ -181,12 +194,14 @@ export class Controls {
   };
 
   private handleWheel = (event: WheelEvent): void => {
+    if (!this.enabled) return;
     event.preventDefault();
     const rect = this.canvas.getBoundingClientRect();
     this.camera.zoomAt(event.deltaY < 0 ? 1.12 : 1 / 1.12, event.clientX - rect.left, event.clientY - rect.top);
   };
 
   private handleKeyDown = (event: KeyboardEvent): void => {
+    if (!this.enabled) return;
     const code = event.code.toLowerCase();
     this.keys.add(code);
     if (event.repeat) return;
@@ -205,6 +220,12 @@ export class Controls {
       case 'digit3':
         this.callbacks.onSpeedChange(4);
         break;
+      case 'keyx':
+        this.callbacks.onRotateView(-1);
+        break;
+      case 'keyv':
+        this.callbacks.onRotateView(1);
+        break;
       case 'keyg':
         this.setMode(this.mode === 'grenade' ? 'none' : 'grenade');
         break;
@@ -222,6 +243,9 @@ export class Controls {
         break;
       case 'keyp':
         this.callbacks.onToggleFlag('paths');
+        break;
+      case 'keyk':
+        this.callbacks.onToggleFlag('hitboxes');
         break;
       case 'keyf':
         // F comme « forward » : A/W/S/D sont réservés au déplacement de la caméra.

@@ -3,7 +3,7 @@
  * de toutes les unités qui utilisent l'arme (aucune donnée en dur dans la simulation).
  */
 
-export type WeaponKind = 'rifle' | 'lmg' | 'smg' | 'shotgun' | 'sniper' | 'melee' | 'grenade' | 'artillery';
+export type WeaponKind = 'rifle' | 'pistol' | 'lmg' | 'smg' | 'shotgun' | 'sniper' | 'melee' | 'grenade' | 'artillery';
 
 export interface WeaponDef {
   id: string;
@@ -47,6 +47,13 @@ export interface WeaponDef {
 }
 
 export const WEAPONS: Record<string, WeaponDef> = {
+  creature_claw: {
+    id: 'creature_claw', label: 'Griffes', kind: 'melee', range: 1.6, optimalRange: 1.6,
+    accuracy: 0.9, damage: 24, armorPen: 0.4, burst: 1, cooldown: 1.4,
+    reloadEvery: 0, reloadTime: 0, suppression: 10, ammo: -1, splashRadius: 0,
+    splashDamage: 0, tileDamage: 0, arcTime: 0, shellsPerStrike: 0, scatter: 0,
+    description: 'Attaque de contact de la créature.',
+  },
   rifle_semi: {
     id: 'rifle_semi',
     label: 'Fusil semi-auto Vrille',
@@ -210,7 +217,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
   },
   grenade_frag: {
     id: 'grenade_frag',
-    label: 'Grenade Fumigène-Frag',
+    label: 'Grenade à fragmentation',
     kind: 'grenade',
     range: 11,
     optimalRange: 6,
@@ -229,11 +236,11 @@ export const WEAPONS: Record<string, WeaponDef> = {
     arcTime: 1.3,
     shellsPerStrike: 0,
     scatter: 0.7,
-    description: "S'arc au-dessus des murs. Détruit les couverts et brise l'élan d'un assaut.",
+    description: "Passe au-dessus des obstacles assez bas, rebondit sur les obstacles trop hauts et explose après sa mèche.",
   },
   artillery_barrage: {
     id: 'artillery_barrage',
-    label: 'Barrage du Grand Moteur',
+    label: 'Barrage d’artillerie',
     kind: 'artillery',
     range: 999,
     optimalRange: 999,
@@ -252,7 +259,49 @@ export const WEAPONS: Record<string, WeaponDef> = {
     arcTime: 6,
     shellsPerStrike: 5,
     scatter: 1.8,
-    description: "Frappe hors-carte demandée par un observateur. Rase les murs — y compris ceux de l'église.",
+    description: "Frappe hors-carte demandée par un observateur. Détruit les murs et les couverts.",
+  },
+  unarmed: {
+    id: 'unarmed', label: 'Combat à mains nues', kind: 'melee',
+    range: 1.3, optimalRange: 1, accuracy: 0.78, damage: 11, armorPen: 0.45,
+    burst: 1, cooldown: 0.9, reloadEvery: 0, reloadTime: 0, suppression: 0,
+    ammo: -1, splashRadius: 0, splashDamage: 0, tileDamage: 0, arcTime: 0,
+    shellsPerStrike: 0, scatter: 0, description: 'Frappe au contact, sans arme à feu.',
+  },
+  modern_pistol: {
+    id: 'modern_pistol', label: 'Pistolet', kind: 'pistol',
+    range: 8, optimalRange: 4, accuracy: 0.4, damage: 11, armorPen: 0.2,
+    burst: 1, cooldown: 1.0, reloadEvery: 8, reloadTime: 1.8, suppression: 4,
+    ammo: 80, splashRadius: 0, splashDamage: 0, tileDamage: 0, arcTime: 0,
+    shellsPerStrike: 0, scatter: 0, description: 'Arme de poing, courte portée.',
+  },
+  modern_sword: {
+    id: 'modern_sword', label: 'Lame', kind: 'melee',
+    range: 1.7, optimalRange: 1.3, accuracy: 1, damage: 13, armorPen: 0.5,
+    burst: 1, cooldown: 1, reloadEvery: 0, reloadTime: 0, suppression: 0,
+    ammo: -1, splashRadius: 0, splashDamage: 0, tileDamage: 0, arcTime: 0,
+    shellsPerStrike: 0, scatter: 0, description: 'Lame de contact, frappe avec une hitbox orientée.',
+  },
+  modern_rifle: {
+      id: 'modern_rifle', label: 'Fusil d’assaut 5,56 mm', kind: 'rifle',
+      range: 13, optimalRange: 7, accuracy: 0.32, damage: 8, armorPen: 0.25,
+      burst: 3, cooldown: 1.4, reloadEvery: 10, reloadTime: 2.2, suppression: 6,
+      ammo: 120, splashRadius: 0, splashDamage: 0, tileDamage: 0, arcTime: 0,
+      shellsPerStrike: 0, scatter: 0, description: 'Arme polyvalente pour les engagements à moyenne portée.',
+  },
+  modern_sniper: {
+    id: 'modern_sniper', label: 'Fusil de précision 7,62 mm', kind: 'sniper',
+    range: 22, optimalRange: 15, accuracy: 0.52, damage: 32, armorPen: 0.55,
+    burst: 1, cooldown: 3.3, reloadEvery: 5, reloadTime: 2.8, suppression: 9,
+    ammo: 40, splashRadius: 0, splashDamage: 0, tileDamage: 2, arcTime: 0,
+    shellsPerStrike: 0, scatter: 0, description: 'Tir précis à longue portée, cadence lente.',
+  },
+  modern_lmg: {
+    id: 'modern_lmg', label: 'Mitrailleuse légère 5,56 mm', kind: 'lmg',
+    range: 16, optimalRange: 9, accuracy: 0.22, damage: 6, armorPen: 0.3,
+    burst: 7, cooldown: 2.5, reloadEvery: 8, reloadTime: 4.2, suppression: 10,
+    ammo: 300, splashRadius: 0, splashDamage: 0, tileDamage: 4, arcTime: 0,
+    shellsPerStrike: 0, scatter: 0, description: 'Appui automatique efficace pour fixer les ennemis.',
   },
 };
 

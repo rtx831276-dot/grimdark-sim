@@ -11,7 +11,7 @@ import { worldDirectionToScreen } from './iso';
  * de la simulation, pour que les particules n'influencent pas le déroulement du combat.
  */
 export interface VisualEffect {
-  kind: 'tracer' | 'impact' | 'explosion' | 'smoke' | 'blood' | 'rally' | 'flag' | 'text';
+  kind: 'tracer' | 'impact' | 'explosion' | 'smoke' | 'blood' | 'rally' | 'flag' | 'text' | 'speech';
   x: number;
   y: number;
   fromX?: number;
@@ -21,6 +21,8 @@ export interface VisualEffect {
   radius?: number;
   color?: string;
   label?: string;
+  /** Émetteur de la bulle, pour la suivre quand il se déplace. */
+  unitId?: number;
   /** Graine fixe pour que l'effet reste identique d'une frame à l'autre. */
   seed?: number;
 }
@@ -57,6 +59,13 @@ export class Effects {
             radius: 0.16,
             seed: this.rng.int(1000),
           });
+          break;
+        }
+        case 'melee':
+        case 'meleeImpact': {
+          if (event.type === 'melee' && (event.weaponId === 'unarmed' || event.weaponId === 'modern_sword')) break; // impact différé
+          this.list.push({ kind: 'impact', x: event.tx ?? event.x ?? 0, y: event.ty ?? event.y ?? 0,
+            ttl: 0.2, maxTtl: 0.2, radius: 0.12, seed: this.rng.int(1000) });
           break;
         }
         case 'hit': {
@@ -124,6 +133,16 @@ export class Effects {
             color: '#8a8374',
             seed: this.rng.int(1000),
           });
+          break;
+        }
+        case 'communication': {
+          this.list.push({ kind: 'speech', unitId: event.unitId, x: event.x ?? 0, y: event.y ?? 0,
+            ttl: 2.5, maxTtl: 2.5, label: event.label ?? 'Contact !' });
+          break;
+        }
+        case 'healed': {
+          this.list.push({ kind: 'text', x: event.x ?? 0, y: event.y ?? 0, ttl: 1.2, maxTtl: 1.2,
+            label: `+${Math.round(event.amount ?? 0)} VIE`, color: '#88dc96' });
           break;
         }
         case 'rally': {
@@ -216,6 +235,7 @@ export function drawEffects(
   ctx: CanvasRenderingContext2D,
   effects: Effects,
   camera: Camera,
+  state?: SimState,
 ): void {
   for (const effect of effects.list) {
     const progress = 1 - effect.ttl / effect.maxTtl;
@@ -302,6 +322,25 @@ export function drawEffects(
         ctx.font = '12px "Segoe UI", sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText(`⚑ ${effect.label ?? 'objectif'}`, p.x, p.y);
+        break;
+      }
+      case 'speech': {
+        const speaker = state?.units.find((unit) => unit.id === effect.unitId && unit.alive);
+        const p = camera.worldToScreen(speaker?.x ?? effect.x, speaker?.y ?? effect.y);
+        const label = effect.label ?? 'Contact !';
+        ctx.font = 'bold 11px "Segoe UI", sans-serif';
+        ctx.textAlign = 'center';
+        const width = ctx.measureText(label).width + 12;
+        const y = p.y - 58 * camera.zoom;
+        ctx.globalAlpha = Math.min(1, effect.ttl * 2);
+        ctx.fillStyle = 'rgba(20, 26, 24, 0.92)';
+        ctx.fillRect(p.x - width / 2, y - 14, width, 20);
+        ctx.strokeStyle = 'rgba(198, 218, 183, 0.8)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(p.x - width / 2, y - 14, width, 20);
+        ctx.fillStyle = '#eff6de';
+        ctx.fillText(label, p.x, y);
+        ctx.globalAlpha = 1;
         break;
       }
       case 'text': {
