@@ -1,6 +1,7 @@
 import { clamp, distance } from '../core/math';
 import { unitDef } from '../data/units';
 import { terrainAt } from './map';
+import { moveWithTerrain } from './collision';
 import { findPath } from './pathfinding';
 import type { SimState, Unit } from './types';
 
@@ -61,20 +62,18 @@ export function followPath(state: SimState, unit: Unit, dt: number): boolean {
   const dy = node.y - unit.y;
   const remaining = Math.hypot(dx, dy);
 
-  if (remaining <= step || remaining < 1e-4) {
-    unit.x = node.x;
-    unit.y = node.y;
+  const travel = Math.min(step, remaining);
+  const position = remaining < 1e-4 ? { x: unit.x, y: unit.y } :
+    moveWithTerrain(state.map, unit.x, unit.y, dx / remaining * travel, dy / remaining * travel);
+  unit.x = position.x; unit.y = position.y;
+  if (Math.hypot(node.x - unit.x, node.y - unit.y) < 1e-4) {
     unit.pathIndex++;
     if (unit.pathIndex >= unit.path.length) {
       unit.path = [];
       unit.pathIndex = 0;
       unit.pathGoal = null;
     }
-  } else {
-    unit.x += (dx / remaining) * step;
-    unit.y += (dy / remaining) * step;
-    unit.facing = Math.atan2(dy, dx);
-  }
+  } else if (remaining > 1e-4) unit.facing = Math.atan2(dy, dx);
 
   if (unit.state === 'idle') unit.state = 'moving';
   return true;
@@ -103,13 +102,19 @@ export function separateUnits(state: SimState, dt: number): void {
       const dist = Math.hypot(dx, dy);
       if (dist >= minDistance) continue;
       // Deux unités exactement superposées : on les écarte d'un pas déterministe.
-      const nx = dist === 0 ? (i % 2 === 0 ? 1 : -1) : dx / dist;
-      const ny = dist === 0 ? 1 : dy / dist;
+      const nx = dist < 1e-9 ? (i % 2 === 0 ? 1 : -1) : dx / dist;
+      const ny = dist < 1e-9 ? 0 : dy / dist;
       const push = (minDistance - dist) * 0.5 * clamp(dt * 20, 0, 1);
-      a.x -= nx * push;
-      a.y -= ny * push;
-      b.x += nx * push;
-      b.y += ny * push;
+      const oldAx = a.x, oldAy = a.y, oldBx = b.x, oldBy = b.y;
+      let pos = moveWithTerrain(state.map, a.x, a.y, -nx * push, -ny * push);
+      a.x = pos.x; a.y = pos.y;
+      pos = moveWithTerrain(state.map, b.x, b.y, nx * push, ny * push);
+      b.x = pos.x; b.y = pos.y;
+      // Si un soldat est coincé contre un mur, reporter son déplacement sur l'autre.
+      const lostA = Math.max(0, push - Math.hypot(a.x - oldAx, a.y - oldAy));
+      const lostB = Math.max(0, push - Math.hypot(b.x - oldBx, b.y - oldBy));
+      if (lostA > 1e-8) { pos = moveWithTerrain(state.map, b.x, b.y, nx * lostA, ny * lostA); b.x = pos.x; b.y = pos.y; }
+      if (lostB > 1e-8) { pos = moveWithTerrain(state.map, a.x, a.y, -nx * lostB, -ny * lostB); a.x = pos.x; a.y = pos.y; }
     }
   }
 }

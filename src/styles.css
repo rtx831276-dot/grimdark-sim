@@ -14,7 +14,7 @@
   --danger: #c8503f;
   --good: #7fb069;
   --warn: #d9a441;
-  --penitents: #b4623a;
+  --penitents: #b89c65;
   --marteau: #4a7f9c;
 }
 
@@ -42,13 +42,24 @@ body {
   width: 100vw;
 }
 
-#battlefield {
+#battlefield-wrap {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #0a0b09;
+}
+
+#battlefield, #battlefield-3d {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
-  cursor: crosshair;
-  background: #0a0b09;
 }
+
+#battlefield { cursor: crosshair; background: transparent; }
+#battlefield-3d { pointer-events: none; }
 
 /* ---------------------------------------------------------------- *
  * HUD
@@ -434,3 +445,38 @@ body {
     inset: 0;
   }
 }
+
+.briefing { border-left: 3px solid var(--accent); line-height: 1.45; }
+.briefing strong { color: var(--accent); font-size: 10px; letter-spacing: 1px; }
+.briefing p { margin: 6px 0 0; }
+
+/* Vue personnelle : le calque ne vole pas la capture de souris au canvas. */
+.fps-overlay { position: absolute; inset: 0; pointer-events: none; color: #eef1df; text-shadow: 0 1px 3px #000; }
+.fps-overlay.hidden { display: none; }
+.fps-reticle { position: absolute; left: 50%; top: 50%; width: 20px; height: 20px; transform: translate(-50%, -50%); color: #fff; filter: drop-shadow(0 1px 1px #111); }
+.fps-reticle::before, .fps-reticle::after { content: ""; position: absolute; background: currentColor; }
+.fps-reticle::before { left: 9px; top: 0; width: 2px; height: 20px; }
+.fps-reticle::after { top: 9px; left: 0; height: 2px; width: 20px; }
+.fps-reticle.enemy { color: #ff6960; }
+.fps-reticle.friendly { color: #75d6ff; }
+.fps-status, .fps-instructions { position: absolute; left: 18px; background: rgba(10, 17, 15, .78); border-left: 3px solid #c9a227; padding: 9px 12px; line-height: 1.5; }
+.fps-status { bottom: 18px; font-weight: 600; }
+.fps-instructions { top: 18px; max-width: min(90%, 500px); }
+
+.fps-status { min-width: 220px; }
+.fps-name { margin-bottom: 7px; color: #f6e8b1; }
+.fps-health-label, .fps-ammo { font-size: 11px; letter-spacing: .08em; }
+.fps-ammo { margin-top: 7px; }
+.fps-bar { height: 5px; margin-top: 3px; background: #51564d; }
+.fps-bar span { display: block; height: 100%; background: #9ac782; }
+.fps-health-fill.critical { background: #e36754; }
+.fps-reload-fill { background: #e1be62 !important; }
+.fps-reload-bar.hidden { display: none; }
+.fps-hurt { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse at center, transparent 40%, rgba(170, 15, 8, .48) 100%); transition: opacity .1s; }
+.fps-hurt.active { opacity: 1; }
+.fps-hitmarker { display: none; position: absolute; left: 50%; top: 50%; width: 32px; height: 32px; transform: translate(-50%, -50%); color: #fff; filter: drop-shadow(0 1px 2px #000); }
+.fps-hitmarker.active { display: block; }
+.fps-hitmarker.kill { color: #ff5d4c; }
+.fps-hitmarker::before, .fps-hitmarker::after { content: ''; position: absolute; left: 15px; top: 1px; width: 2px; height: 30px; background: linear-gradient(to bottom, currentColor 0 33%, transparent 33% 67%, currentColor 67% 100%); }
+.fps-hitmarker::before { transform: rotate(45deg); }
+.fps-hitmarker::after { transform: rotate(-45deg); }

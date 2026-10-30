@@ -12,6 +12,8 @@ export class Camera {
   x = 22;
   y = 15;
   zoom = 1;
+  /** Rotation autour de la verticale, en radians (vue 3D). */
+  rotation = 0;
   minZoom = 0.45;
   maxZoom = 2.8;
 
@@ -25,30 +27,32 @@ export class Camera {
     this.viewHeight = height;
   }
 
-  /** Origine écran, en pixels isométriques (avant zoom). */
-  private origin(): ScreenPoint {
-    const iso = worldToIso(this.x, this.y);
-    return { x: iso.x - this.viewWidth / 2 / this.zoom, y: iso.y - this.viewHeight / 2 / this.zoom };
-  }
-
   worldToScreen(wx: number, wy: number): ScreenPoint {
-    const iso = worldToIso(wx, wy);
-    const origin = this.origin();
-    return { x: (iso.x - origin.x) * this.zoom, y: (iso.y - origin.y) * this.zoom };
+    const dx = wx - this.x;
+    const dy = wy - this.y;
+    const cos = Math.cos(this.rotation);
+    const sin = Math.sin(this.rotation);
+    const iso = worldToIso(cos * dx + sin * dy, -sin * dx + cos * dy);
+    return { x: this.viewWidth / 2 + iso.x * this.zoom, y: this.viewHeight / 2 + iso.y * this.zoom };
   }
 
   screenToWorld(sx: number, sy: number): Vec2 {
-    const origin = this.origin();
-    return isoToWorld(sx / this.zoom + origin.x, sy / this.zoom + origin.y);
+    const rotated = isoToWorld((sx - this.viewWidth / 2) / this.zoom, (sy - this.viewHeight / 2) / this.zoom);
+    const cos = Math.cos(this.rotation);
+    const sin = Math.sin(this.rotation);
+    return { x: this.x + cos * rotated.x - sin * rotated.y, y: this.y + sin * rotated.x + cos * rotated.y };
   }
 
-  /** Déplacement en pixels écran (glisser-déposer, molette, flèches). */
+  /** Déplacement en pixels écran, quelle que soit l'orientation. */
   panByScreen(dx: number, dy: number): void {
-    const origin = this.origin();
-    const world = isoToWorld(origin.x + dx / this.zoom, origin.y + dy / this.zoom);
-    const current = isoToWorld(origin.x, origin.y);
-    this.x -= world.x - current.x;
-    this.y -= world.y - current.y;
+    const center = this.screenToWorld(this.viewWidth / 2, this.viewHeight / 2);
+    const moved = this.screenToWorld(this.viewWidth / 2 + dx, this.viewHeight / 2 + dy);
+    this.x -= moved.x - center.x;
+    this.y -= moved.y - center.y;
+  }
+
+  rotateBy(radians: number): void {
+    this.rotation = (this.rotation + radians) % (Math.PI * 2);
   }
 
   /** Zoom centré sur un point de l'écran (typiquement le curseur de la souris). */

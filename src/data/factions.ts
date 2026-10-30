@@ -17,14 +17,19 @@ export interface FactionDef {
 }
 
 export const FACTIONS: Record<FactionId, FactionDef> = {
+  creature: {
+    id: 'creature', name: 'Créature', shortName: 'Créature', creed: 'Menace indépendante',
+    color: '#9b303d', colorDark: '#39171d', colorBright: '#ff7280',
+    deployment: { x: 20, y: 14, w: 6, h: 7 }, roster: [], doctrine: 'Hostile aux deux forces.',
+  },
   penitents: {
     id: 'penitents',
-    name: 'Les Pénitents de la Cendre',
-    shortName: 'Pénitents',
-    creed: 'La cendre lave. Le rempart protège. Le doute est une trahison.',
-    color: '#b4623a',
-    colorDark: '#5d2f1a',
-    colorBright: '#e08a52',
+    name: 'Force Aegis',
+    shortName: 'Aegis',
+    creed: 'Groupe tactique · secteur ouest',
+    color: '#b89c65',
+    colorDark: '#55452d',
+    colorBright: '#e5c68c',
     deployment: { x: 2, y: 4, w: 6, h: 26 },
     roster: [
       { unit: 'sergent', count: 1 },
@@ -40,13 +45,13 @@ export const FACTIONS: Record<FactionId, FactionDef> = {
       { unit: 'flagellant', count: 1 },
     ],
     doctrine:
-      "Vagues humaines précédées de fanatiques. Excellent moral, discipline moyenne : il faut tuer leurs sergents et leurs prédicateurs pour que la ligne cède.",
+      "Infanterie polyvalente, appuyée par des spécialistes et un observateur.",
   },
   marteau: {
     id: 'marteau',
-    name: "Ordre du Marteau Noir",
-    shortName: 'Marteau',
-    creed: "Ce que l'Engin n'a pas forgé ne mérite pas de tenir.",
+    name: 'Force Vostok',
+    shortName: 'Vostok',
+    creed: 'Groupe tactique · secteur est',
     color: '#4a7f9c',
     colorDark: '#20394a',
     colorBright: '#79b0cb',
@@ -64,11 +69,12 @@ export const FACTIONS: Record<FactionId, FactionDef> = {
       { unit: 'milice', count: 1 },
     ],
     doctrine:
-      "Feu écrasant et marcheurs mécanisés. Peu d'hommes, beaucoup de plomb : ils gagnent en clouant l'adversaire au sol, puis en avançant sous couvert de la mitraille.",
+      "Infanterie et armes de soutien : fixer l’adversaire avant de progresser.",
   },
 };
 
-export const FACTION_IDS = Object.keys(FACTIONS) as FactionId[];
+// Les deux armées seules participent au tableau de score et aux conditions de victoire.
+export const FACTION_IDS: FactionId[] = ['penitents', 'marteau'];
 
 export function factionDef(id: FactionId): FactionDef {
   const def = FACTIONS[id];

@@ -1,5 +1,6 @@
 import type { SimState } from '../types';
 import { updateSoldier } from './soldierAI';
+import { updateCreature } from './creatureAI';
 
 /**
  * IA du jeu, en quatre couches — voir chaque module pour son contrat :
@@ -26,14 +27,18 @@ import { updateSoldier } from './soldierAI';
  * évaluée exactement une fois par tick : deux conditions indispensables au déterminisme
  * (même graine ⇒ même bataille, vérifié par `tests/simulation.test.ts`).
  */
-export function updateAi(state: SimState, dt: number): void {
+export function updateAi(state: SimState, dt: number, controlledUnitId?: number): void {
   for (const unit of state.units) {
-    if (!unit.alive) continue;
-    updateSoldier(state, unit, dt);
+    if (!unit.alive || unit.id === controlledUnitId) continue;
+    if (unit.defId === 'creature') updateCreature(state, unit, dt);
+    else updateSoldier(state, unit, dt);
   }
 }
 
 export * from './commanderAI';
 export * from './squadAI';
 export * from './soldierAI';
+export * from './meleeAI';
+export * from './meleeDodge';
+export * from './communications';
 export * from './undeadAI';

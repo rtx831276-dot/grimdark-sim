@@ -4,7 +4,7 @@ import { TERRAIN } from '../data/terrain';
 import { factionDef, FACTION_IDS } from '../data/factions';
 import { unitDef } from '../data/units';
 import { weapon } from '../data/weapons';
-import { lineOfSight, type SimState, type TileState, type Unit } from '../sim';
+import { lineOfSight, meleeMove, SOLDIER_HURTBOX_RADIUS, type SimState, type TileState, type Unit } from '../sim';
 import type { Camera } from './camera';
 import { drawEffects, Effects } from './effects';
 import { depthOf, TILE_H } from './iso';
@@ -14,6 +14,7 @@ export interface RenderFlags {
   cover: boolean;
   los: boolean;
   paths: boolean;
+  hitboxes: boolean;
 }
 
 export interface RenderOptions {
@@ -111,8 +112,11 @@ export function renderBattle(options: RenderOptions): void {
   for (const projectile of state.projectiles) {
     const start = projectile.impactTick - projectile.flightTicks;
     const t = Math.max(0, Math.min(1, (state.tick - start + options.alpha) / Math.max(1, projectile.flightTicks)));
-    const screen = camera.worldToScreen(projectile.x, projectile.y);
-    const arc = Math.sin(t * Math.PI) * (projectile.kind === 'shell' ? 190 : 60) * camera.zoom;
+    const motion = projectile.grenadeMotion;
+    const screen = camera.worldToScreen(motion ? lerp(motion.previousX, projectile.x, options.alpha) : projectile.x,
+      motion ? lerp(motion.previousY, projectile.y, options.alpha) : projectile.y);
+    const arc = motion ? lerp(motion.previousHeight, motion.height, options.alpha) * 28 * camera.zoom :
+      Math.sin(t * Math.PI) * (projectile.kind === 'shell' ? 190 : 60) * camera.zoom;
     drawables.push({
       depth: depthOf(projectile.x, projectile.y) + 0.4,
       layer: 3,
@@ -136,7 +140,7 @@ export function renderBattle(options: RenderOptions): void {
   drawables.sort((a, b) => (a.depth === b.depth ? a.layer - b.layer : a.depth - b.depth));
   for (const drawable of drawables) drawable.draw();
 
-  drawEffects(ctx, options.effects, camera);
+  drawEffects(ctx, options.effects, camera, state);
   drawOverlays(options);
   drawDragSelectionHint(options);
   drawGhostTarget(options);
@@ -340,9 +344,43 @@ function drawObjective(
  * Calques tactiques (couverture, ligne de vue, chemins)
  * ------------------------------------------------------------------ */
 
+/** Affiche les disques vulnérables et les secteurs de frappe du modèle 2D. */
+function drawMeleeHitboxes(options: RenderOptions): void {
+  const { ctx, camera, state } = options;
+  ctx.save();
+  for (const unit of state.units) {
+    if (!unit.alive) continue;
+    const attack = unit.meleeAttack;
+    if (attack) {
+      const move = meleeMove(attack.clip);
+      const origin = camera.worldToScreen(unit.x, unit.y);
+      ctx.beginPath(); ctx.moveTo(origin.x, origin.y);
+      for (let i = 0; i <= 20; i++) {
+        const angle = attack.facing - move.halfAngle + 2 * move.halfAngle * i / 20;
+        const p = camera.worldToScreen(unit.x + Math.cos(angle) * move.reach, unit.y + Math.sin(angle) * move.reach);
+        ctx.lineTo(p.x, p.y);
+      }
+      ctx.closePath();
+      const active = state.tick === attack.impactTick;
+      ctx.fillStyle = active ? 'rgba(255, 90, 45, 0.34)' : attack.resolved ? 'rgba(165, 170, 175, 0.08)' : 'rgba(255, 190, 65, 0.13)';
+      ctx.strokeStyle = active ? 'rgba(255, 110, 60, 0.95)' : attack.resolved ? 'rgba(165, 170, 175, 0.35)' : 'rgba(255, 195, 90, 0.65)';
+      ctx.lineWidth = 1.5; ctx.fill(); ctx.stroke();
+    }
+    ctx.beginPath();
+    for (let i = 0; i <= 24; i++) {
+      const angle = i * Math.PI * 2 / 24;
+      const p = camera.worldToScreen(unit.x + Math.cos(angle) * SOLDIER_HURTBOX_RADIUS, unit.y + Math.sin(angle) * SOLDIER_HURTBOX_RADIUS);
+      if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+    }
+    ctx.closePath(); ctx.strokeStyle = 'rgba(100, 220, 255, 0.8)'; ctx.lineWidth = 1; ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawOverlays(options: RenderOptions): void {
   const { ctx, camera, state } = options;
 
+  if (options.flags.hitboxes) drawMeleeHitboxes(options);
   if (options.flags.paths) {
     for (const unit of state.units) {
       if (!unit.alive || unit.path.length === 0) continue;
@@ -482,3 +520,61 @@ export function unitScreenPosition(camera: Camera, unit: Unit): { x: number; y: 
 
 /** Factions présentes sur la carte (ordre stable, pour l'affichage). */
 export const RENDER_FACTION_ORDER = FACTION_IDS;
+
+/** Calque transparent des commandes et effets sur la scène WebGL. */
+export function renderThreeOverlay(options: RenderOptions): void {
+  const { ctx, camera, state } = options;
+  ctx.clearRect(0, 0, camera.viewWidth, camera.viewHeight);
+  ctx.save();
+  for (const objective of state.map.objectives) {
+    drawObjective(ctx, camera, objective.x, objective.y, objective.radius, objective.label, state.objectiveControl[objective.id] ?? null);
+  }
+  for (const unit of state.units) {
+    if (!unit.alive) continue;
+    const p = camera.worldToScreen(lerp(unit.prevX, unit.x, options.alpha), lerp(unit.prevY, unit.y, options.alpha));
+    if (options.selection.has(unit.id) || unit.id === options.hoveredUnitId) {
+      ctx.strokeStyle = options.selection.has(unit.id) ? '#f0e2b0' : 'rgba(240,226,176,.5)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y, 15 * camera.zoom, 7.5 * camera.zoom, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    const w = 22 * camera.zoom;
+    const y = p.y - 38 * camera.zoom;
+    ctx.fillStyle = 'rgba(0,0,0,.7)';
+    ctx.fillRect(p.x - w / 2 - 1, y - 1, w + 2, 5);
+    ctx.fillStyle = unit.hp / unit.maxHp > 0.4 ? '#8fbd78' : '#d65d4d';
+    ctx.fillRect(p.x - w / 2, y, w * Math.max(0, unit.hp / unit.maxHp), 3);
+    const badge = unitDef(unit.defId).roleBadge;
+    if (badge && camera.zoom >= 0.65) {
+      ctx.font = 'bold 10px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(15, 18, 17, 0.8)';
+      ctx.fillRect(p.x + w / 2 + 2, y - 5, 13, 13);
+      ctx.fillStyle = badge === '+' ? '#8fe5a1' : '#e8e2cf';
+      ctx.fillText(badge, p.x + w / 2 + 8.5, y + 5);
+    }
+    if (unit.state === 'pinned' || unit.state === 'broken') {
+      ctx.fillStyle = unit.state === 'pinned' ? '#e0c341' : '#e05e50';
+      ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('!', p.x, y - 4);
+    }
+  }
+  for (const projectile of state.projectiles) {
+    const start = projectile.impactTick - projectile.flightTicks;
+    const t = Math.max(0, Math.min(1, (state.tick - start + options.alpha) / Math.max(1, projectile.flightTicks)));
+    const motion = projectile.grenadeMotion;
+    const p = camera.worldToScreen(motion ? lerp(motion.previousX, projectile.x, options.alpha) : projectile.x,
+      motion ? lerp(motion.previousY, projectile.y, options.alpha) : projectile.y);
+    const arc = motion ? lerp(motion.previousHeight, motion.height, options.alpha) * 28 * camera.zoom :
+      Math.sin(t * Math.PI) * (projectile.kind === 'shell' ? 190 : 60) * camera.zoom;
+    ctx.fillStyle = projectile.kind === 'shell' ? '#f4d49a' : '#a7aa84';
+    ctx.beginPath(); ctx.arc(p.x, p.y - arc, 3, 0, Math.PI * 2); ctx.fill();
+  }
+  drawEffects(ctx, options.effects, camera, state);
+  drawOverlays(options);
+  drawDragSelectionHint(options);
+  drawGhostTarget(options);
+  drawModeCursor(options);
+  ctx.restore();
+}

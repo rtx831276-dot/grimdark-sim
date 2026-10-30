@@ -1,7 +1,7 @@
 import { distance } from '../../core/math';
 import { unitDef } from '../../data/units';
 import { weapon } from '../../data/weapons';
-import { callArtilleryStrike, useCharge, useGrenade } from '../abilities';
+import { callArtilleryStrike, useCharge, useGrenade, useHeal, woundedAllyFor } from '../abilities';
 import { acquireTarget, canFire, effectiveAccuracy, fireSalvo } from '../combat';
 import { lineOfSight } from '../los';
 import { terrainAt } from '../map';
@@ -9,8 +9,10 @@ import { followPath, hasArrived, requestPath } from '../movement';
 import { useRally } from '../morale';
 import { findCoverNear } from '../pathfinding';
 import type { SimState, Unit } from '../types';
+import { queueReplacement } from '../respawn';
 import { commanderFireSupportTarget } from './commanderAI';
 import { squadMovementIntent, squadShouldRally } from './squadAI';
+import { pursueMeleeTarget, selectMeleeTarget } from './meleeAI';
 
 /**
  * COUCHE SOLDAT — « que fait cet homme, maintenant ? »
@@ -40,8 +42,22 @@ export function updateSoldier(state: SimState, unit: Unit, dt: number): void {
   updateCover(state, unit);
 
   if (unit.state === 'broken') {
+    unit.meleeAttack = null;
+    unit.meleeDodge = null;
     handleBroken(state, unit, dt);
     unit.intent = 'repli';
+    return;
+  }
+
+  if (unit.meleeDodge) { unit.intent = 'esquive'; return; }
+
+  // Une attaque en cours reste engagée jusqu'à sa fin, sauf ordre ou démoralisation.
+  if (unit.meleeAttack) {
+    // L'orientation reste fixe pendant le geste : l'adversaire peut l'esquiver.
+    unit.facing = unit.meleeAttack.facing;
+    unit.intent = 'mêlée';
+    unit.path = [];
+    unit.pathGoal = null;
     return;
   }
 
@@ -69,17 +85,29 @@ function executePlayerOrders(state: SimState, unit: Unit, dt: number): boolean {
   }
 
   if (unit.forcedTargetId === null) return false;
-  const forced = state.units[unit.forcedTargetId - 1];
+  const forced = state.units.find(candidate => candidate.id === unit.forcedTargetId);
   if (!forced || !forced.alive) {
     unit.forcedTargetId = null;
+    unit.targetId = null;
+    unit.path = [];
+    unit.pathIndex = 0;
+    unit.pathGoal = null;
+    unit.nextRepathTick = 0;
     return false;
   }
 
+  unit.targetId = forced.id;
   unit.intent = 'ordre: attaque';
   const gun = weapon(unitDef(unit.defId).weapon);
   const dist = distance(unit.x, unit.y, forced.x, forced.y);
   if (dist <= gun.range && lineOfSight(state.map, unit.x, unit.y, forced.x, forced.y).visible) {
+    unit.intent = gun.kind === 'melee' ? 'mêlée' : 'ordre: attaque';
+    unit.facing = Math.atan2(forced.y - unit.y, forced.x - unit.x);
+    unit.path = [];
+    unit.pathGoal = null;
     if (canFire(unit)) fireSalvo(state, unit, forced);
+  } else if (gun.kind === 'melee') {
+    pursueMeleeTarget(state, unit, forced, dt);
   } else if (requestPath(state, unit, forced.x, forced.y, 1.6)) {
     followPath(state, unit, dt);
   } else {
@@ -120,6 +148,16 @@ function seekCoverIfExposed(state: SimState, unit: Unit, dt: number): boolean {
 
 function trySoldierAbilities(state: SimState, unit: Unit, dt: number): boolean {
   const def = unitDef(unit.defId);
+
+  // Soins automatiques uniquement quand aucun ordre direct ne monopolise le soldat.
+  const heal = unit.abilities.heal;
+  if (heal && heal.charges > 0 && heal.cooldown <= 0) {
+    const patient = woundedAllyFor(state, unit);
+    if (patient && useHeal(state, unit, patient)) {
+      unit.intent = 'soins';
+      return true;
+    }
+  }
 
   // Charge fanatique : on ne la déclenche que sous le feu, quand tenir ne suffit plus.
   const charge = unit.abilities.charge;
@@ -178,19 +216,36 @@ function trySoldierAbilities(state: SimState, unit: Unit, dt: number): boolean {
 
 function engageOrManoeuvre(state: SimState, unit: Unit, dt: number): boolean {
   const gun = weapon(unitDef(unit.defId).weapon);
-  const target = acquireTarget(state, unit);
+  // Un repli explicite ne doit pas se transformer en poursuite automatique.
+  if (gun.kind === 'melee' && unit.stance === 'fallback') {
+    unit.targetId = null;
+    return false;
+  }
+  const target = gun.kind === 'melee' ? selectMeleeTarget(state, unit) : acquireTarget(state, unit);
   if (!target) {
+    if (gun.kind === 'melee' && unit.targetId !== null) {
+      unit.path = [];
+      unit.pathIndex = 0;
+      unit.pathGoal = null;
+      unit.nextRepathTick = 0;
+    }
     unit.targetId = null;
     return false;
   }
 
+  if (gun.kind === 'melee' && unit.targetId !== target.id) {
+    unit.path = [];
+    unit.pathIndex = 0;
+    unit.pathGoal = null;
+    unit.nextRepathTick = 0;
+  }
   unit.targetId = target.id;
   unit.facing = Math.atan2(target.y - unit.y, target.x - unit.x);
   const dist = distance(unit.x, unit.y, target.x, target.y);
   const los = lineOfSight(state.map, unit.x, unit.y, target.x, target.y);
 
   if (los.visible && dist <= gun.range) {
-    unit.intent = 'feu';
+    unit.intent = gun.kind === 'melee' ? 'mêlée' : 'feu';
     if (unit.state !== 'pinned') unit.state = 'engaging';
     unit.path = [];
     unit.pathGoal = null;
@@ -202,8 +257,11 @@ function engageOrManoeuvre(state: SimState, unit: Unit, dt: number): boolean {
     return true;
   }
 
+  // Tenir permet de riposter au contact, sans poursuivre automatiquement.
+  if (gun.kind === 'melee' && unit.stance === 'hold') return false;
   unit.intent = los.visible ? 'rapprochement' : 'manœuvre';
-  if (requestPath(state, unit, target.x, target.y, 1.8)) followPath(state, unit, dt);
+  if (gun.kind === 'melee') pursueMeleeTarget(state, unit, target, dt);
+  else if (requestPath(state, unit, target.x, target.y, 1.8)) followPath(state, unit, dt);
   else followPath(state, unit, dt);
   return true;
 }
@@ -257,6 +315,8 @@ function handleBroken(state: SimState, unit: Unit, dt: number): void {
   if (!line) return;
   if (hasArrived(unit, line.x, line.y, 2.4)) {
     unit.alive = false;
+    unit.removedTick = state.tick;
+    if (state.respawn?.unlimited) queueReplacement(state, unit);
     unit.state = 'dead';
     unit.path = [];
     const runtime = state.factions[unit.faction];

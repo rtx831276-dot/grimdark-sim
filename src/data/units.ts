@@ -1,7 +1,7 @@
 import type { FactionId } from '../core/ids';
 
 /** Capacités activables en jeu. */
-export type AbilityId = 'grenade' | 'artillery' | 'rally' | 'charge';
+export type AbilityId = 'grenade' | 'artillery' | 'rally' | 'charge' | 'heal';
 
 /**
  * Traits passifs. Ils sont interprétés par la simulation (src/sim/), pas par le rendu.
@@ -16,6 +16,8 @@ export interface UnitDef {
   id: string;
   label: string;
   role: string;
+  /** Abréviation facultative affichée au-dessus du soldat. */
+  roleBadge?: string;
   /** Absent = unité disponible pour toutes les factions. */
   faction?: FactionId;
   hp: number;
@@ -39,6 +41,12 @@ export interface UnitDef {
 }
 
 export const UNITS: Record<string, UnitDef> = {
+  creature: {
+    id: 'creature', label: 'Créature', role: 'Menace indépendante', roleBadge: '!',
+    hp: 200, armor: 0.15, speed: 2.6, skill: 1, morale: 100, discipline: 1, vision: 25,
+    weapon: 'creature_claw', abilities: [], charges: {}, traits: ['mechanical', 'shock'],
+    description: 'Une créature hostile aux deux camps. Elle attaque au contact.',
+  },
   milice: {
     id: 'milice',
     label: 'Milice levée',
@@ -263,6 +271,96 @@ export const UNITS: Record<string, UnitDef> = {
     charges: {},
     traits: ['mechanical'],
     description: "Marcheur à vapeur. Lent, increvable, et il ne connaît pas la peur.",
+  },
+  modern_fighter: {
+    id: 'modern_fighter', label: 'Combattant', role: 'Polyvalent', roleBadge: 'S', hp: 50, armor: 0.1,
+    speed: 2.3, skill: 0.85, morale: 70, discipline: 0.6, vision: 14,
+    weapon: 'unarmed', abilities: [], charges: {}, traits: [],
+    description: 'Combat à mains nues en attendant son équipement.',
+  },
+  modern_melee_leader: {
+    id: 'modern_melee_leader', label: 'Chef de groupe', role: 'Commandement', roleBadge: 'C', hp: 52, armor: 0.12,
+    speed: 2.3, skill: 0.85, morale: 80, discipline: 0.8, vision: 16,
+    weapon: 'unarmed', abilities: ['rally'], charges: { rally: 3 }, traits: [],
+    description: 'Peut rallier ses camarades démoralisés avec la commande Ralliement.',
+  },
+  modern_assault_melee: {
+    id: 'modern_assault_melee', label: 'Assaut', role: 'Attaque rapide', roleBadge: 'A', hp: 44, armor: 0.07,
+    speed: 2.7, skill: 1.0, morale: 72, discipline: 0.55, vision: 14,
+    weapon: 'unarmed', abilities: [], charges: {}, traits: [],
+    description: 'Rapide et précis au contact, mais moins résistant.',
+  },
+  modern_defender: {
+    id: 'modern_defender', label: 'Défenseur', role: 'Résistance', roleBadge: 'D', hp: 68, armor: 0.22,
+    speed: 1.75, skill: 0.75, morale: 78, discipline: 0.8, vision: 13,
+    weapon: 'unarmed', abilities: [], charges: {}, traits: [],
+    description: 'Encaisse davantage de coups, mais se déplace plus lentement.',
+  },
+  modern_recon_melee: {
+    id: 'modern_recon_melee', label: 'Éclaireur', role: 'Reconnaissance', roleBadge: 'E', hp: 38, armor: 0.04,
+    speed: 3.0, skill: 0.75, morale: 65, discipline: 0.5, vision: 21,
+    weapon: 'unarmed', abilities: [], charges: {}, traits: [],
+    description: 'Se déplace vite et détecte les ennemis plus loin, mais reste fragile.',
+  },
+  modern_medic: {
+    id: 'modern_medic', label: 'Médecin', role: 'Soutien', roleBadge: '+', hp: 42, armor: 0.06,
+    speed: 2.2, skill: 0.65, morale: 68, discipline: 0.6, vision: 14,
+    weapon: 'unarmed', abilities: ['heal'], charges: { heal: 3 }, traits: [],
+    description: 'Soigne automatiquement un allié blessé proche quand il est disponible : 3 soins par bataille.',
+  },
+  modern_blade: {
+    id: 'modern_blade', label: 'Combattant à la lame', role: 'Mêlée', roleBadge: 'L', hp: 58, armor: 0.12,
+    speed: 2.5, skill: 0.8, morale: 75, discipline: 0.7, vision: 15,
+    weapon: 'modern_sword', abilities: [], charges: {}, traits: ['shock'],
+    description: 'Combat au contact avec une lame et des frappes orientées.',
+  },
+  modern_pistol_fighter: {
+    id: 'modern_pistol_fighter', label: 'Combattant au pistolet', role: 'Infanterie', roleBadge: 'P', hp: 54, armor: 0.10,
+    speed: 2.4, skill: 0.75, morale: 70, discipline: 0.6, vision: 15,
+    weapon: 'modern_pistol', abilities: [], charges: {}, traits: [],
+    description: 'Combat à courte portée avec un pistolet.',
+  },
+  modern_rifleman: {
+    id: 'modern_rifleman', label: 'Fusilier', role: 'Infanterie', roleBadge: 'F', hp: 42, armor: 0.12,
+    speed: 2.2, skill: 0.75, morale: 65, discipline: 0.55, vision: 14,
+    weapon: 'modern_rifle', abilities: [], charges: {}, traits: [],
+    description: 'Soldat polyvalent équipé d’un fusil d’assaut.',
+  },
+  modern_leader: {
+    id: 'modern_leader', label: 'Chef de groupe', role: 'Commandement', hp: 46, armor: 0.15,
+    speed: 2.3, skill: 0.8, morale: 80, discipline: 0.8, vision: 16,
+    weapon: 'modern_rifle', abilities: ['rally'], charges: { rally: 3 }, traits: [],
+    description: 'Coordonne les troupes et peut rallier les soldats proches.',
+  },
+  modern_grenadier: {
+    id: 'modern_grenadier', label: 'Grenadier', role: 'Assaut', roleBadge: 'G', hp: 42, armor: 0.12,
+    speed: 2.2, skill: 0.72, morale: 65, discipline: 0.55, vision: 14,
+    weapon: 'modern_rifle', abilities: ['grenade'], charges: { grenade: 3 }, traits: [],
+    description: 'Utilise des grenades pour déloger les ennemis à couvert.',
+  },
+  modern_gunner: {
+    id: 'modern_gunner', label: 'Mitrailleur', role: 'Appui', hp: 44, armor: 0.15,
+    speed: 1.8, skill: 0.65, morale: 64, discipline: 0.7, vision: 15,
+    weapon: 'modern_lmg', abilities: [], charges: {}, traits: [],
+    description: 'Fixe les adversaires par le feu de suppression.',
+  },
+  modern_marksman: {
+    id: 'modern_marksman', label: 'Tireur de précision', role: 'Tir longue portée', hp: 38, armor: 0.1,
+    speed: 2, skill: 0.95, morale: 68, discipline: 0.65, vision: 22,
+    weapon: 'modern_sniper', abilities: [], charges: {}, traits: ['marksman'],
+    description: 'Engage les cibles prioritaires à longue distance.',
+  },
+  modern_observer: {
+    id: 'modern_observer', label: 'Observateur avancé', role: 'Appui feu', hp: 38, armor: 0.1,
+    speed: 2.3, skill: 0.7, morale: 68, discipline: 0.7, vision: 24,
+    weapon: 'modern_rifle', abilities: ['artillery'], charges: { artillery: 2 }, traits: [],
+    description: 'Désigne les objectifs pour l’artillerie hors carte.',
+  },
+  modern_scout: {
+    id: 'modern_scout', label: 'Éclaireur', role: 'Reconnaissance', hp: 36, armor: 0.08,
+    speed: 2.8, skill: 0.7, morale: 65, discipline: 0.5, vision: 22,
+    weapon: 'modern_rifle', abilities: [], charges: {}, traits: ['shock'],
+    description: 'Rapide et doté d’une longue portée de détection.',
   },
 };
 

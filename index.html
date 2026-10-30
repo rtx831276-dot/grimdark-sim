@@ -3,16 +3,32 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Grimdark Sim V0 — Simulateur tactique isométrique 2.5D</title>
-    <meta name="description" content="Prototype jouable d'un simulateur de guerre tactique isométrique 2.5D grimdark : village ruiné, église, tranchées, morale, suppression, artillerie." />
+    <title>Opération Carrefour — prototype tactique moderne</title>
+    <meta name="description" content="Prototype tactique de combat au corps à corps, avec soldats en 3D." />
   </head>
   <body>
     <div id="app">
-      <canvas id="battlefield"></canvas>
+      <div id="battlefield-wrap">
+        <canvas id="battlefield-3d" aria-hidden="true"></canvas>
+        <canvas id="battlefield" aria-label="Champ de bataille"></canvas>
+        <div id="fps-overlay" class="fps-overlay hidden" aria-live="polite">
+          <div class="fps-hurt" aria-hidden="true"></div>
+          <div class="fps-reticle" aria-hidden="true"></div>
+          <div class="fps-hitmarker" aria-hidden="true"></div>
+          <div class="fps-status">
+            <div class="fps-name"></div>
+            <div class="fps-health-label"></div>
+            <div class="fps-bar" aria-hidden="true"><span class="fps-health-fill"></span></div>
+            <div class="fps-ammo"></div>
+            <div class="fps-reload-bar fps-bar hidden" aria-hidden="true"><span class="fps-reload-fill"></span></div>
+          </div>
+          <div class="fps-instructions"></div>
+        </div>
+      </div>
 
       <aside id="hud">
         <header class="panel topbar">
-          <div class="brand">GRIMDARK<span>SIM</span><em>v0</em></div>
+          <div class="brand">OPÉRATION<span> CARREFOUR</span><em>prototype</em></div>
           <div class="readouts">
             <span id="clock" class="clock">00:00</span>
             <span id="speed" class="speed">1×</span>
@@ -20,6 +36,30 @@
         </header>
 
         <section id="scoreboard" class="panel scoreboard"></section>
+
+        <section class="panel briefing">
+          <strong>MISSION 01 · BATAILLE SANS FIN</strong>
+          <p>Deux forces fictives s’affrontent au carrefour avec pistolets, fusils, lames et combat à mains nues. Une créature hostile chasse les deux camps.</p>
+          <p><b>Renforts illimités</b> : un combattant réapparaît 10 secondes après un décès ou une fuite. La créature réapparaît aussi après sa mort. La carte reste délimitée et la partie ne se termine pas automatiquement.</p>
+          <p>La bataille commence en pause.<br /><b>Clic gauche / glisser</b> : sélectionner · <b>Clic droit</b> : déplacer ou attaquer · <b>Espace</b> : lancer / pause</p>
+          <p class="hint">Les soldats signalent les ennemis et demandent du renfort aux alliés proches (messages texte, sans voix). Les deux camps sont jouables.</p>
+          <details>
+            <summary>Mêlée · techniques et zones</summary>
+            <p class="hint">L’IA alterne coups directs, enchaînements et balayages. Le coup touche uniquement si la zone de frappe rencontre un adversaire au moment de l’impact. Le balayage peut toucher deux ennemis.</p>
+            <p class="hint">Activez <b>Hitboxes</b> (K) : disques bleus = zones vulnérables, secteurs orange = attaques. Rouge = tick d’impact. Les coups de mêlée ne blessent pas les alliés.</p>
+          </details>
+          <details>
+            <summary>Rôles des soldats</summary>
+            <ul>
+              <li><b>L / P · Lame / Pistolet</b> : combattants équipés.</li>
+              <li><b>C · Chef</b> : rallie ses camarades.</li>
+              <li><b>S · Combattant</b> : polyvalent au contact.</li>
+              <li><b>F / G · Fusilier / Grenadier</b> : fusil ; le grenadier peut lancer des grenades.</li>
+              <li><b>+ · Médecin</b> : soigne automatiquement un allié blessé proche quand il est disponible (3 charges).</li>
+            </ul>
+            <p class="hint">Les grenades rebondissent sur les obstacles trop hauts et explosent après leur mèche (attention aux alliés, et au lanceur, dans la zone). Sélectionnez un soldat pour voir ses capacités.</p>
+          </details>
+        </section>
 
         <section class="panel orders">
           <div class="row">
@@ -29,8 +69,7 @@
           </div>
           <div class="row">
             <button data-action="rally" title="Ralliement : rendre du moral aux troupes autour d'un officier (T)">Ralliement</button>
-            <button data-action="mode" data-value="grenade" title="Lancer une grenade sur un point (G)">Grenade</button>
-            <button data-action="mode" data-value="artillery" title="Demander un barrage d'artillerie hors-carte (B)">Barrage</button>
+            <button data-action="mode" data-value="grenade" title="Sélectionner un grenadier, puis viser au clic (G)">Grenade</button>
           </div>
           <div class="row">
             <button data-action="pause" title="Suspendre le temps (Espace)">⏸ Pause</button>
@@ -42,9 +81,16 @@
             <button data-action="flag" data-value="cover" title="Afficher la couverture du terrain (C)">Couverture</button>
             <button data-action="flag" data-value="los" title="Afficher lignes de vue et portées (L)">Vues</button>
             <button data-action="flag" data-value="paths" title="Afficher les chemins en cours (P)">Chemins</button>
+            <button data-action="flag" data-value="hitboxes" title="Afficher les zones de frappe et de contact (K)">Hitboxes</button>
           </div>
           <div class="row">
+            <button data-action="rotate" data-value="-1" title="Pivoter la caméra à gauche (X)">⟲ Pivoter</button>
+            <button data-action="rotate" data-value="1" title="Pivoter la caméra à droite (V)">Pivoter ⟳</button>
+          </div>
+          <div class="row"><button data-action="fps" title="Prendre le contrôle du soldat sélectionné">Mode FPS</button></div>
+          <div class="row">
             <button data-action="newBattle" title="Relancer une bataille avec une nouvelle graine">Nouvelle bataille</button>
+            <button data-action="toggleView" title="Changer entre vue 3D et vue 2D">Vue 2D</button>
           </div>
         </section>
 
@@ -57,12 +103,13 @@
         <details class="panel help">
           <summary>Aide · commandes</summary>
           <ul>
-            <li><b>Clic gauche</b> — sélectionner une unité ; <b>clic glissé</b> — sélectionner un groupe.</li>
+            <li><b>Clic gauche</b> — sélectionner une unité ; <b>clic glissé</b> — sélectionner un groupe ; <b>Maj + clic</b> — ajouter / retirer.</li>
             <li><b>Clic droit</b> — ordre de déplacement, ou d'attaque sur un ennemi.</li>
+            <li><b>Mode FPS</b> — sélectionnez un soldat (ou laissez le jeu choisir un fusilier), puis cliquez Mode FPS. Souris : viser ; ZQSD/WASD : bouger ; clic gauche : tirer ou frapper ; clic droit maintenu : zoom avec une arme à feu ; R : recharger ; Échap libère la souris, « Quitter FPS » revient à la vue tactique.</li>
+            <li><b>X / V</b> — pivoter la caméra (vue 3D).</li>
             <li><b>Molette</b> — zoom ; <b>clic central</b> ou <b>ZQSD/WASD</b> — déplacer la caméra.</li>
             <li><b>F / H / R / T</b> — assaut, tenir, repli, ralliement.</li>
-            <li><b>G / B</b> — grenade, barrage d'artillerie (puis clic gauche sur la cible).</li>
-            <li><b>C / L / P</b> — couverture, lignes de vue, chemins.</li>
+            <li><b>C / L / P / K</b> — couverture, lignes de vue, chemins, hitboxes.</li>
             <li><b>Espace</b> — pause ; <b>1 / 2 / 3</b> — vitesse ×1, ×2, ×4.</li>
           </ul>
           <p class="hint">
