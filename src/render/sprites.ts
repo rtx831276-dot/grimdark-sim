@@ -19,7 +19,7 @@ export interface SpriteOptions {
 export function drawUnit(ctx: CanvasRenderingContext2D, unit: Unit, position: ScreenPoint, options: SpriteOptions): void {
   const def = unitDef(unit.defId);
   const faction = factionDef(unit.faction);
-  const scale = Math.max(0.55, Math.min(1.5, options.zoom));
+  const scale = Math.max(0.55, Math.min(1.5, options.zoom)) * (unit.defId === 'creature' ? 2 : 1);
   const radius = 9 * scale;
   const { x, y } = position;
 

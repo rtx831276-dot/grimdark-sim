@@ -482,3 +482,28 @@ body {
 .fps-hitmarker::before, .fps-hitmarker::after { content: ''; position: absolute; left: 15px; top: 1px; width: 2px; height: 30px; background: linear-gradient(to bottom, currentColor 0 33%, transparent 33% 67%, currentColor 67% 100%); }
 .fps-hitmarker::before { transform: rotate(45deg); }
 .fps-hitmarker::after { transform: rotate(-45deg); }
+
+/* Vue d'ensemble compacte : elle ne couvre jamais les contrôles FPS. */
+.tactical-map {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  z-index: 5;
+  width: 238px;
+  max-width: calc(100% - 28px);
+  padding: 8px;
+  color: #ded8c4;
+  background: rgba(17, 20, 18, .92);
+  border: 1px solid #6b6651;
+  box-shadow: 0 4px 16px rgba(0,0,0,.35);
+}
+.tactical-map[hidden] { display: none; }
+.tactical-map summary { cursor: pointer; font-size: 10px; font-weight: 700; letter-spacing: .08em; color: #dbcc9e; }
+.tactical-map summary span { float: right; color: #a19e8d; font-size: 9px; font-weight: 400; letter-spacing: 0; }
+#minimap { display: block; width: 100%; height: auto; margin-top: 7px; border: 1px solid #575d55; cursor: crosshair; touch-action: none; }
+#minimap:focus-visible { outline: 2px solid #e6dba7; outline-offset: 2px; }
+.map-legend { display: flex; justify-content: space-between; gap: 4px; margin-top: 5px; font-size: 9px; color: #d8d5c6; }
+.map-aegis { color: #e2c681; }
+.map-vostok { color: #80bfe2; }
+.map-creature { color: #e85c50; }
+@media (max-width: 600px) { .tactical-map { width: 166px; left: 8px; bottom: 8px; } .tactical-map summary span { display: none; } .map-legend { flex-wrap: wrap; } }

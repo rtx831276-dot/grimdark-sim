@@ -2,7 +2,7 @@ import { distance } from '../../core/math';
 import { unitDef } from '../../data/units';
 import { weapon } from '../../data/weapons';
 import { callArtilleryStrike, useCharge, useGrenade, useHeal, woundedAllyFor } from '../abilities';
-import { acquireTarget, canFire, effectiveAccuracy, fireSalvo } from '../combat';
+import { acquireTarget, canFire, effectiveAccuracy, fireSalvo, meleeEngagementRange } from '../combat';
 import { lineOfSight } from '../los';
 import { terrainAt } from '../map';
 import { followPath, hasArrived, requestPath } from '../movement';
@@ -86,7 +86,7 @@ function executePlayerOrders(state: SimState, unit: Unit, dt: number): boolean {
 
   if (unit.forcedTargetId === null) return false;
   const forced = state.units.find(candidate => candidate.id === unit.forcedTargetId);
-  if (!forced || !forced.alive) {
+  if (!forced || !forced.alive || forced.state === 'wounded') {
     unit.forcedTargetId = null;
     unit.targetId = null;
     unit.path = [];
@@ -100,7 +100,7 @@ function executePlayerOrders(state: SimState, unit: Unit, dt: number): boolean {
   unit.intent = 'ordre: attaque';
   const gun = weapon(unitDef(unit.defId).weapon);
   const dist = distance(unit.x, unit.y, forced.x, forced.y);
-  if (dist <= gun.range && lineOfSight(state.map, unit.x, unit.y, forced.x, forced.y).visible) {
+  if (dist <= (gun.kind === 'melee' ? meleeEngagementRange(gun.range, forced) : gun.range) && lineOfSight(state.map, unit.x, unit.y, forced.x, forced.y).visible) {
     unit.intent = gun.kind === 'melee' ? 'mêlée' : 'ordre: attaque';
     unit.facing = Math.atan2(forced.y - unit.y, forced.x - unit.x);
     unit.path = [];
@@ -244,14 +244,14 @@ function engageOrManoeuvre(state: SimState, unit: Unit, dt: number): boolean {
   const dist = distance(unit.x, unit.y, target.x, target.y);
   const los = lineOfSight(state.map, unit.x, unit.y, target.x, target.y);
 
-  if (los.visible && dist <= gun.range) {
+  if (los.visible && dist <= (gun.kind === 'melee' ? meleeEngagementRange(gun.range, target) : gun.range)) {
     unit.intent = gun.kind === 'melee' ? 'mêlée' : 'feu';
     if (unit.state !== 'pinned') unit.state = 'engaging';
     unit.path = [];
     unit.pathGoal = null;
     // Discipline de tir : on n'ouvre le feu que si la cible est raisonnablement atteignable.
     // Sans ce garde-fou, les deux camps se criblent de balles à bout de portée sans résultat.
-    if (canFire(unit) && effectiveAccuracy(state, unit, target, dist) >= MIN_FIRE_ACCURACY) {
+    if (canFire(unit) && (gun.kind === 'melee' || effectiveAccuracy(state, unit, target, dist) >= MIN_FIRE_ACCURACY)) {
       fireSalvo(state, unit, target);
     }
     return true;

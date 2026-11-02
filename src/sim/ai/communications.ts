@@ -24,15 +24,15 @@ export function updateCommunications(state: SimState): void {
   const start = state.tick % state.units.length;
   for (let i = 0; i < state.units.length; i++) {
     const speaker = state.units[(start + i) % state.units.length]!;
-    if (!speaker.alive || speaker.state === 'broken' || weapon(unitDef(speaker.defId).weapon).kind !== 'melee') continue;
+    if (!speaker.alive || (speaker.state === 'broken' || speaker.state === 'wounded') || weapon(unitDef(speaker.defId).weapon).kind !== 'melee') continue;
     if ((comms.nextSpeakerTick[speaker.id] ?? 0) > state.tick || (comms.nextFactionTick[speaker.faction] ?? 0) > state.tick) continue;
-    const recipients = state.units.filter((ally) => ally.alive && ally.state !== 'broken' && ally.id !== speaker.id &&
+    const recipients = state.units.filter((ally) => ally.alive && ally.state !== 'broken' && ally.state !== 'wounded' && ally.id !== speaker.id &&
       ally.faction === speaker.faction && distance(ally.x, ally.y, speaker.x, speaker.y) <= COMMS_RADIUS).map((ally) => ally.id);
     if (recipients.length === 0) continue;
     let target: Unit | null = null;
     let bestDistance = Infinity;
     for (const enemy of state.units) {
-      if (!enemy.alive || enemy.faction === speaker.faction) continue;
+      if (!enemy.alive || enemy.state === 'wounded' || enemy.faction === speaker.faction) continue;
       const dist = distance(speaker.x, speaker.y, enemy.x, enemy.y);
       if (dist > unitDef(speaker.defId).vision || dist > bestDistance) continue;
       if (!lineOfSight(state.map, speaker.x, speaker.y, enemy.x, enemy.y).visible) continue;

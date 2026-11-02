@@ -48,7 +48,7 @@ export interface WeaponDef {
 
 export const WEAPONS: Record<string, WeaponDef> = {
   creature_claw: {
-    id: 'creature_claw', label: 'Griffes', kind: 'melee', range: 1.6, optimalRange: 1.6,
+    id: 'creature_claw', label: 'Griffes', kind: 'melee', range: 3.2, optimalRange: 3.2,
     accuracy: 0.9, damage: 24, armorPen: 0.4, burst: 1, cooldown: 1.4,
     reloadEvery: 0, reloadTime: 0, suppression: 10, ammo: -1, splashRadius: 0,
     splashDamage: 0, tileDamage: 0, arcTime: 0, shellsPerStrike: 0, scatter: 0,

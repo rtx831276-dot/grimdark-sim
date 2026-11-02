@@ -1,7 +1,8 @@
+import { CREATURE_HIT_HEIGHT, CREATURE_HIT_RADIUS } from '../data/creature';
 import { clamp } from '../core/math';
 import { unitDef } from '../data/units';
 import { weapon, type WeaponDef } from '../data/weapons';
-import { canFire, fireAtPoint, fireBallistic, fireSalvo } from './combat';
+import { canFire, fireAtPoint, fireBallistic, fireSalvo, reloadFirearm } from './combat';
 import { lineOfSight } from './los';
 import { isSolid, terrainAt } from './map';
 import { moveWithTerrain } from './collision';
@@ -42,10 +43,10 @@ export function targetInSight(state: SimState, player: Unit, yaw: number, pitch:
     const ox = other.x - player.x, oy = other.y - player.y;
     const along = ox * dx + oy * dy;
     const lateral = Math.abs(ox * dy - oy * dx);
-    const radius = other.defId === 'creature' ? 0.65 : BODY_RADIUS;
+    const radius = other.defId === 'creature' ? CREATURE_HIT_RADIUS : BODY_RADIUS;
     if (along <= 0 || along > range || lateral > radius || along >= nearest) continue;
     const height = EYE_HEIGHT + Math.tan(pitch) * along;
-    if (height < 0 || height > (other.defId === 'creature' ? 1.4 : BODY_HEIGHT)) continue;
+    if (height < 0 || height > (other.defId === 'creature' ? CREATURE_HIT_HEIGHT : BODY_HEIGHT)) continue;
     if (!lineOfSight(state.map, player.x, player.y, other.x, other.y).visible) continue;
     closest = other; nearest = along;
   }
@@ -65,14 +66,14 @@ function rayEndpoint(state: SimState, unit: Unit, yaw: number, pitch: number, ra
 
 export function updateDirectControl(state: SimState, input: DirectControl, dt: number): void {
   const unit = state.units.find(u => u.id === input.unitId && u.alive);
-  if (!unit || !Number.isFinite(input.yaw) || !Number.isFinite(input.pitch)) return;
+  if (!unit || unit.state === 'wounded' || !Number.isFinite(input.yaw) || !Number.isFinite(input.pitch)) return;
   const gun = weapon(unitDef(unit.defId).weapon);
   const yaw = input.yaw, pitch = clamp(input.pitch, -1.2, 1.2);
   unit.goal = null; unit.path = []; unit.pathGoal = null; unit.pathIndex = 0; unit.forcedTargetId = null;
   unit.facing = yaw;
   if (unit.reloading && unit.cooldown <= 0) unit.reloading = false;
   if (input.reload && unit.state !== 'broken' && gun.kind !== 'melee' && gun.reloadEvery > 0 && unit.salvosLeft < gun.reloadEvery && !unit.reloading) {
-    unit.salvosLeft = gun.reloadEvery; unit.cooldown = gun.reloadTime; unit.reloading = true;
+    reloadFirearm(unit, gun);
   }
   const startX = unit.x, startY = unit.y;
   const forward = Number.isFinite(input.forward) ? clamp(input.forward, -1, 1) : 0;

@@ -211,6 +211,8 @@ export class Hud {
             <dt>Intention</dt><dd>${unit.intent}</dd>
             ${unit.meleeAttack ? `<dt>Technique</dt><dd>${meleeMove(unit.meleeAttack.clip).label}</dd>` : ''}
             <dt>Arme</dt><dd>${gun.label} (${gun.range} tuiles)</dd>
+            ${unit.reserveSalvos !== undefined ? `<dt>Munitions</dt><dd>${unit.salvosLeft * gun.burst} + ${unit.reserveSalvos * gun.burst} en réserve</dd>` : ''}
+            ${unit.bandages !== undefined ? `<dt>Bandages</dt><dd>${unit.bandages}</dd>` : ''}
             <dt>Vitesse</dt><dd>${def.speed.toFixed(1)} tuiles/s</dd>
             <dt>Protection</dt><dd>${Math.round(def.armor * 100)} %</dd>
             <dt>Détection</dt><dd>${def.vision} tuiles</dd>
@@ -319,6 +321,16 @@ function describeEvent(event: SimEvent): string | null {
       return `<span class="bad">fuite hors du champ</span>`;
     case 'communication':
       return `<span class="good">${event.faction ? factionDef(event.faction).shortName : 'Allié'}</span> : ${event.label ?? 'Contact !'}`;
+    case 'wounded':
+      return `<span class="warn">blessé grave</span> : évacuation nécessaire`;
+    case 'rescueStarted':
+      return `<span class="good">évacuation</span> : secours en route`;
+    case 'hospitalized':
+      return `<span class="good">hôpital</span> : soins en cours`;
+    case 'medicalRecovered':
+      return `<span class="good">soigné</span> : retour au combat`;
+    case 'resupplied':
+      return `<span class="good">ravitaillement</span> : ${event.label ?? ''}`;
     case 'healed':
       return `<span class="good">soins</span> +${Math.round(event.amount ?? 0)} vie`;
     case 'rally':
@@ -344,6 +356,8 @@ function describeEvent(event: SimEvent): string | null {
 
 function stateLabel(unit: Unit): string {
   switch (unit.state) {
+    case 'wounded':
+      return unit.wound?.hospitalUntil != null ? 'soins à l’hôpital' : unit.wound?.carriedBy != null ? 'transportée' : 'blessée grave';
     case 'broken':
       return 'démoralisée';
     case 'pinned':

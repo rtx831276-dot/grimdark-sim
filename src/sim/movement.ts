@@ -90,13 +90,13 @@ export function hasArrived(unit: Unit, x: number, y: number, tolerance = 0.6): b
  */
 export function separateUnits(state: SimState, dt: number): void {
   const units = state.units;
-  const minDistance = 0.62;
   for (let i = 0; i < units.length; i++) {
     const a = units[i]!;
-    if (!a.alive) continue;
+    if (!a.alive || a.state === 'wounded') continue;
     for (let j = i + 1; j < units.length; j++) {
       const b = units[j]!;
-      if (!b.alive) continue;
+      if (!b.alive || b.state === 'wounded') continue;
+      const minDistance = a.defId === 'creature' || b.defId === 'creature' ? 1.1 : 0.62;
       const dx = b.x - a.x;
       const dy = b.y - a.y;
       const dist = Math.hypot(dx, dy);

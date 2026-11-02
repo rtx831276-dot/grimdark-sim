@@ -1,3 +1,4 @@
+import { CREATURE_HIT_HEIGHT, CREATURE_HIT_RADIUS } from '../data/creature';
 import { clamp } from '../core/math';
 import { TERRAIN } from '../data/terrain';
 import { weapon, type WeaponDef } from '../data/weapons';
@@ -15,8 +16,8 @@ export function muzzleSpeed(gun: WeaponDef): number {
 }
 export const BULLET_GRAVITY = 9.81;
 const STEP_DISTANCE = 0.08;
-const unitRadius = (unit: Unit): number => unit.defId === 'creature' ? 0.65 : 0.27;
-const unitHeight = (unit: Unit): number => unit.defId === 'creature' ? 1.36 : unit.state === 'pinned' ? 0.7 : 1.06;
+const unitRadius = (unit: Unit): number => unit.defId === 'creature' ? CREATURE_HIT_RADIUS : 0.27;
+const unitHeight = (unit: Unit): number => unit.defId === 'creature' ? CREATURE_HIT_HEIGHT : unit.state === 'wounded' ? (unit.wound?.carriedBy !== null && unit.wound?.carriedBy !== undefined ? 1.0 : 0.28) : unit.state === 'pinned' ? 0.7 : 1.06;
 
 export interface BulletMotion {
   height: number;

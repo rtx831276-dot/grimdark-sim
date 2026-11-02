@@ -17,7 +17,8 @@ describe('quartier Carrefour sans fin', () => {
     expect(ENDLESS_CARREFOUR.rows.every(row => row.length === 44)).toBe(true);
     for (let x = 0; x < 44; x++) expect(tileAt(map, x, 17)?.terrain).toBe('road');
     for (const [x, y, terrain] of [[16, 18, 'wreck'], [17, 24, 'container'], [19, 27, 'roadblock'],
-      [15, 26, 'door'], [30, 26, 'door'], [14, 26, 'urbanWall']] as const) expect(tileAt(map, x, y)?.terrain).toBe(terrain);
+      [15, 26, 'door'], [30, 26, 'door'], [14, 26, 'urbanWall'],
+      [12, 10, 'supplyCrate'], [14, 10, 'pavement'], [13, 2, 'door'], [30, 2, 'door']] as const) expect(tileAt(map, x, y)?.terrain).toBe(terrain);
   });
 
   it('relie toutes les cases de déploiement praticables aux deux camps et aux objectifs', () => {
@@ -48,11 +49,27 @@ describe('quartier Carrefour sans fin', () => {
         expect(findPath(map, zone.x + 2.5, 17.5, objective.x, objective.y), objective.id).not.toBeNull();
       }
     }
-    for (const [x, y] of [[15, 26], [30, 26]]) expect(reached.has(y * map.width + x)).toBe(true);
+    for (const [x, y] of [[15, 26], [30, 26], [13, 2], [30, 2], [13, 1], [30, 1]])
+      expect(reached.has(y * map.width + x), `${x},${y}`).toBe(true);
+    for (const objective of ['north_street', 'south_street']) expect(map.objectives.some(o => o.id === objective)).toBe(true);
+    for (const x of [9, 10, 34, 35]) for (let y = 3; y <= 31; y++)
+      expect(tileAt(map, x, y)?.terrain, `contournement ${x},${y}`).toBe('road');
+    for (let x = 9; x <= 35; x++) expect(tileAt(map, x, 3)?.terrain).toBe('road');
+  });
+
+  it('les marquages de cour restent plats et disparaissent quand le sol est détruit', () => {
+    const map = compileMap(ENDLESS_CARREFOUR), x = 14, y = 10;
+    expect(tileAt(map, x, y)?.terrain).toBe('pavement');
+    const withinTile = () => modernDecorParts(map).filter(p => p.x >= x && p.x < x + 1 && p.z >= y && p.z < y + 1);
+    const before = withinTile();
+    expect(before.length).toBeGreaterThanOrEqual(2);
+    expect(before.every(p => p.y + p.sy / 2 <= 0.025)).toBe(true);
+    tileAt(map, x, y)!.terrain = 'crater';
+    expect(withinTile()).toHaveLength(0);
   });
 
   it.each([
-    ['wreck', 16, 18], ['container', 17, 24], ['roadblock', 19, 27],
+    ['wreck', 16, 18], ['container', 17, 24], ['roadblock', 19, 27], ['supplyCrate', 12, 10],
   ] as [TerrainId, number, number][])('%s bloque, arrête une balle et disparaît après destruction', (kind, x, y) => {
     const state = createSimulation({ map: ENDLESS_CARREFOUR, seed: 4 });
     for (const u of state.units) u.alive = false;
@@ -72,10 +89,11 @@ describe('quartier Carrefour sans fin', () => {
     const before = modernDecorParts(state.map).filter(p => p.x >= x && p.x < x + 1 && p.z >= y && p.z < y + 1);
     expect(before.length).toBeGreaterThan(2);
     // Deux explosions suffisent même pour le conteneur le plus résistant.
-    for (let n = 0; n < 3; n++) detonate(state, x + 0.5, y + 0.5, weapon('grenade_frag'), shooter.faction, shooter.id);
+    for (let n = 0; n < 3 && tileAt(state.map, x, y)?.terrain === kind; n++)
+      detonate(state, x + 0.5, y + 0.5, weapon('grenade_frag'), shooter.faction, shooter.id);
     expect(tileAt(state.map, x, y)?.terrain).toBe('rubble');
     expect(isSolid(state.map, x, y)).toBe(false);
     const after = modernDecorParts(state.map).filter(p => p.x >= x && p.x < x + 1 && p.z >= y && p.z < y + 1);
-    expect(after.some(p => p.color === 0x5d776e || p.color === 0x657164 || p.color === 0x969b90)).toBe(false);
+    expect(after.some(p => p.color === 0x5d776e || p.color === 0x657164 || p.color === 0x969b90 || p.color === 0x867b60)).toBe(false);
   });
 });

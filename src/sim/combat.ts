@@ -1,6 +1,7 @@
 import { clamp, distance } from '../core/math';
 import type { Vec2 } from '../core/ids';
 import { unitDef } from '../data/units';
+import { CREATURE_AIM_HEIGHT, CREATURE_HIT_RADIUS } from '../data/creature';
 import { weapon, type WeaponDef } from '../data/weapons';
 import { coverAgainst, lineOfSight } from './los';
 import { MELEE_CLIPS, SWORD_CLIPS, meleeMove } from './melee-timing';
@@ -8,7 +9,13 @@ import { meleeHitboxIntersects } from './melee-hitbox';
 import { addSuppression, applyMoraleShock, MORALE_SHAKEN } from './morale';
 import type { SimState, Unit } from './types';
 import { queueReplacement } from './respawn';
+import { incapacitate, releaseMedicalLinks } from './medical';
 import { BULLET_GRAVITY, muzzleSpeed, spawnBullet } from './ballistics';
+
+/** La grande cible peut être frappée sur le bord de son volume, pas seulement au centre. */
+export function meleeEngagementRange(range: number, target: Unit): number {
+  return range + (target.defId === 'creature' ? CREATURE_HIT_RADIUS - 0.22 : 0);
+}
 
 /** Chance de toucher une cible donnée, avec toute la pile de modificateurs. */
 export function effectiveAccuracy(state: SimState, shooter: Unit, target: Unit, dist: number): number {
@@ -61,7 +68,7 @@ export function acquireTarget(state: SimState, unit: Unit, requireRange = true):
   let bestScore = Number.NEGATIVE_INFINITY;
 
   for (const other of state.units) {
-    if (!other.alive || other.faction === unit.faction) continue;
+    if (!other.alive || other.state === 'wounded' || other.faction === unit.faction) continue;
     const dist = distance(unit.x, unit.y, other.x, other.y);
     if (dist > def.vision) continue;
     if (requireRange && dist > gun.range) continue;
@@ -100,6 +107,14 @@ export function applyDamage(
   options: { sourceId?: number; faction?: string; kind?: 'kinetic' | 'explosive' | 'melee'; label?: string; blastOrigin?: Vec2 },
 ): void {
   if (!target.alive || amount <= 0) return;
+  // Un blessé déjà à terre peut succomber aux dommages collatéraux.
+  if (target.state === 'wounded') {
+    state.stats.damage += amount;
+    const attacker = state.units.find(unit => unit.id === options.sourceId);
+    if (attacker && attacker.faction !== target.faction) attacker.damageDealt += amount;
+    killUnit(state, target, options.sourceId, options.faction);
+    return;
+  }
   target.hp -= amount;
   target.sinceUnderFire = 0;
   state.stats.damage += amount;
@@ -112,6 +127,13 @@ export function applyDamage(
   applyMoraleShock(state, target, shock, options.label ?? options.kind);
 
   if (target.hp <= 0) {
+    // Dans ce scénario, une blessure par balle ou mêlée peut être secourue ;
+    // explosion ou traumatisme trop important restent immédiatement mortels.
+    if (state.map.def.hospitals?.[target.faction] && target.defId !== 'creature' && options.kind !== 'explosive' &&
+        target.hp >= -target.maxHp * 0.75) {
+      incapacitate(state, target, options.sourceId, options.faction);
+      return;
+    }
     const blast = options.kind === 'explosive' && options.blastOrigin ? {
       origin: options.blastOrigin, strength: 1.3 + clamp(amount / 80, 0, 1), lift: 0.25 + clamp(amount / 100, 0, 0.65),
     } : undefined;
@@ -123,6 +145,7 @@ export function applyDamage(
 export function killUnit(state: SimState, target: Unit, sourceId?: number, faction?: string,
   blast?: { origin: Vec2; strength: number; lift: number }): void {
   if (!target.alive) return;
+  releaseMedicalLinks(state, target);
   const attacker = sourceId !== undefined ? state.units.find(unit => unit.id === sourceId) : undefined;
   // Une explosion projette depuis son centre, pas depuis le lanceur de la grenade.
   const origin = blast?.origin ?? attacker;
@@ -180,7 +203,7 @@ export function fireSalvo(state: SimState, shooter: Unit, target: Unit): void {
   const gun = weapon(def.weapon);
   if (gun.id === 'unarmed' || gun.id === 'modern_sword') {
     if (!canFire(shooter) || !target.alive || shooter.faction === target.faction ||
-        distance(shooter.x, shooter.y, target.x, target.y) > gun.range ||
+        distance(shooter.x, shooter.y, target.x, target.y) > meleeEngagementRange(gun.range, target) ||
         !lineOfSight(state.map, shooter.x, shooter.y, target.x, target.y).visible) return;
     const facing = Math.atan2(target.y - shooter.y, target.x - shooter.x);
     const nearby = state.units.filter(other => other.alive && other.faction !== shooter.faction &&
@@ -201,15 +224,16 @@ export function fireSalvo(state: SimState, shooter: Unit, target: Unit): void {
       amount: 1, label: clip.name });
     return;
   }
+  if (shooter.reserveSalvos !== undefined && !canFire(shooter)) return;
   shooter.facing = Math.atan2(target.y - shooter.y, target.x - shooter.x);
   if (gun.kind !== 'melee' && state.map.def.ballisticWeapons) {
     const dist = distance(shooter.x, shooter.y, target.x, target.y);
     const speed = muzzleSpeed(gun);
-    const aimHeight = target.defId === 'creature' ? 0.8 : target.state === 'pinned' ? 0.45 : 0.72;
+    const aimHeight = target.defId === 'creature' ? CREATURE_AIM_HEIGHT : target.state === 'pinned' ? 0.45 : 0.72;
     // Compense approximativement la chute à la distance au moment du tir.
     const pitch = Math.atan2(aimHeight - 0.93 + 0.5 * BULLET_GRAVITY * (dist / speed) ** 2, Math.max(dist, 0.1));
     const accuracy = effectiveAccuracy(state, shooter, target, dist);
-    const radius = target.defId === 'creature' ? 0.65 : 0.27;
+    const radius = target.defId === 'creature' ? CREATURE_HIT_RADIUS : 0.27;
     const spread = Math.min(0.3, radius / Math.max(dist, 1) / Math.max(accuracy, 0.08));
     fireBallistic(state, shooter, shooter.facing, pitch, spread, target.id);
     return;
@@ -219,14 +243,24 @@ export function fireSalvo(state: SimState, shooter: Unit, target: Unit): void {
 }
 
 /** Dépense une salve pour le tir tactique et le tir direct, avec les mêmes cadences. */
+/** Recharge depuis la réserve (illimitée uniquement dans les anciens scénarios). */
+export function reloadFirearm(shooter: Unit, gun: WeaponDef): boolean {
+  const missing = gun.reloadEvery - shooter.salvosLeft;
+  if (missing <= 0 || gun.reloadEvery <= 0) return false;
+  const amount = shooter.reserveSalvos === undefined ? missing : Math.min(missing, shooter.reserveSalvos);
+  if (amount <= 0) return false;
+  shooter.salvosLeft += amount;
+  if (shooter.reserveSalvos !== undefined) shooter.reserveSalvos -= amount;
+  shooter.reloading = true; shooter.cooldown = gun.reloadTime;
+  return true;
+}
+
 function beginFirearmSalvo(state: SimState, shooter: Unit, gun: WeaponDef): void {
   shooter.burstLeft = gun.burst;
   if (gun.reloadEvery > 0) {
     shooter.salvosLeft -= 1;
     if (shooter.salvosLeft <= 0) {
-      shooter.salvosLeft = gun.reloadEvery;
-      shooter.reloading = true;
-      shooter.cooldown = gun.reloadTime;
+      if (!reloadFirearm(shooter, gun)) { shooter.reloading = false; shooter.cooldown = gun.cooldown; }
     } else { shooter.reloading = false; shooter.cooldown = gun.cooldown; }
   } else { shooter.reloading = false; shooter.cooldown = gun.cooldown; }
   shooter.shotsFired += gun.burst;
@@ -338,7 +372,7 @@ function resolveSalvo(state: SimState, shooter: Unit, target: Unit, gun: WeaponD
 
 /** Vrai si l'unité peut lâcher une salve maintenant. */
 export function canFire(shooter: Unit): boolean {
-  return shooter.alive && shooter.state !== 'broken' && shooter.cooldown <= 0 && !shooter.meleeAttack && !shooter.meleeDodge;
+  return shooter.alive && shooter.state !== 'wounded' && shooter.salvosLeft > 0 && !shooter.logisticsTask && !shooter.rescue && shooter.state !== 'broken' && shooter.cooldown <= 0 && !shooter.meleeAttack && !shooter.meleeDodge;
 }
 
 /** Les impacts sont résolus après les déplacements, dans l'ordre stable des unités. */
@@ -346,7 +380,7 @@ export function updateMeleeAttacks(state: SimState): void {
   for (const shooter of state.units) {
     const attack = shooter.meleeAttack;
     if (!attack) continue;
-    if (!shooter.alive || shooter.state === 'broken' || shooter.goal || shooter.stance === 'fallback') {
+    if (!shooter.alive || shooter.state === 'wounded' || shooter.rescue || shooter.state === 'broken' || shooter.goal || shooter.stance === 'fallback') {
       shooter.meleeAttack = null;
       continue;
     }
@@ -356,8 +390,8 @@ export function updateMeleeAttacks(state: SimState): void {
       const move = meleeMove(attack.clip);
       if (gun.id === 'unarmed' || gun.id === 'modern_sword') {
         // Les ennemis les plus proches interceptent le coup ; jamais les alliés.
-        const targets = state.units.filter(target => target.alive && target.faction !== shooter.faction &&
-          meleeHitboxIntersects(shooter.x, shooter.y, attack.facing, move, target.x, target.y) &&
+        const targets = state.units.filter(target => target.alive && target.state !== 'wounded' && target.faction !== shooter.faction &&
+          meleeHitboxIntersects(shooter.x, shooter.y, attack.facing, move, target.x, target.y, target.defId === 'creature' ? CREATURE_HIT_RADIUS : undefined) &&
           lineOfSight(state.map, shooter.x, shooter.y, target.x, target.y).visible)
           .sort((a, b) => distance(shooter.x, shooter.y, a.x, a.y) - distance(shooter.x, shooter.y, b.x, b.y) || a.id - b.id);
         for (const target of targets.slice(0, move.maxTargets)) resolveSalvo(state, shooter, target, gun, move.damageScale);

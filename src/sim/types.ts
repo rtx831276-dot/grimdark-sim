@@ -32,7 +32,7 @@ export interface GameMap {
  * Unités
  * ------------------------------------------------------------------ */
 
-export type UnitState = 'idle' | 'moving' | 'engaging' | 'pinned' | 'broken' | 'dead';
+export type UnitState = 'idle' | 'moving' | 'engaging' | 'pinned' | 'broken' | 'wounded' | 'dead';
 
 /** Posture : ce que l'unité fait quand elle n'a pas d'ordre direct. */
 export type Stance = 'advance' | 'hold' | 'fallback';
@@ -60,6 +60,15 @@ export interface Unit {
   state: UnitState;
   stance: Stance;
   alive: boolean;
+  /** Présent tant que le soldat est gravement blessé, jamais sur un mort. */
+  wound?: { bleedOutTick: number; assignedTo: number | null; carriedBy: number | null;
+    hospitalUntil: number | null; sourceId?: number; sourceFaction?: string };
+  /** Mission d'évacuation du porteur, exclusive d'un ordre de combat. */
+  rescue?: { targetId: number; stage: 'approach' | 'carrying'; automatic?: boolean };
+  /** Réserve en salves ; absent signifie munitions illimitées. */
+  reserveSalvos?: number;
+  bandages?: number;
+  logisticsTask?: { kind: 'supply'; cache: number; startedTick: number; destination: Vec2 } | { kind: 'selfHeal'; until: number };
   /** Début de la conservation temporaire du corps ou de l’unité sortie. */
   removedTick: number | null;
   /** Cible d'engagement courante. */
@@ -169,6 +178,11 @@ export type SimEventType =
   | 'recovered'
   | 'rally'
   | 'healed'
+  | 'resupplied'
+  | 'wounded'
+  | 'rescueStarted'
+  | 'hospitalized'
+  | 'medicalRecovered'
   | 'communication'
   | 'explosion'
   | 'terrainDestroyed'
@@ -260,6 +274,8 @@ export interface SimState {
   respawn: RespawnState | null;
   units: Unit[];
   projectiles: Projectile[];
+  /** Stocks par caisse destructible ; aucune caisse sur les anciens scénarios. */
+  supplyCaches: Array<{ x: number; y: number; ammo: number; medicine: number; grenades: number; nextRestockTick: number }>;
   /** Événements du tick courant uniquement. */
   events: SimEvent[];
   communications: {
@@ -287,6 +303,7 @@ export interface SimState {
 export type Order =
   | { type: 'move'; units: number[]; x: number; y: number }
   | { type: 'attack'; units: number[]; target: number }
+  | { type: 'rescue'; units: number[]; target: number }
   | { type: 'hold'; units: number[] }
   | { type: 'advance'; units: number[] }
   | { type: 'fallback'; units: number[] }

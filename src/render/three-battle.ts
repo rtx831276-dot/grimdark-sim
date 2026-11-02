@@ -12,12 +12,14 @@ import { lerp } from '../core/math';
 import { factionDef } from '../data/factions';
 import { TERRAIN } from '../data/terrain';
 import { unitDef } from '../data/units';
+import { CREATURE_MODEL_SCALE } from '../data/creature';
 import { weapon as weaponDef } from '../data/weapons';
 import type { GameMap, SimEvent, SimState, Unit } from '../sim';
 import type { Camera } from './camera';
 import { syncThreeCamera } from './three-camera';
 import { SoldierAnimator, soldierMotion } from './soldier-animation';
 import { CombatAnimation } from './combat-animation';
+import { CreatureAnimator } from './creature-animation';
 import { RagdollWorld, type Ragdoll } from './ragdoll';
 import { disposeMountedWeapon, mountWeapon, reloadHandWeight, stabilizeFirearm, WEAPON_DISPLAY, type HeldWeapon } from './weapon-mount';
 import { ModernDecor, makeGroundTexture } from './modern-decor';
@@ -30,9 +32,9 @@ import { makeModernSky } from './sky';
 import { sampleBulletTrace } from './projectile-visuals';
 
 const MODERN_GROUND_COLORS: Partial<Record<import('../data/terrain').TerrainId, number>> = {
-  mud: 0x858575, road: 0x868e8c, crater: 0x655e50, rubble: 0x8b8d83,
+  mud: 0x858575, road: 0x868e8c, pavement: 0x969991, crater: 0x655e50, rubble: 0x8b8d83,
   sandbag: 0x858575, wall: 0x858575, urbanWall: 0x858575, door: 0x858575, tree: 0x858575,
-  fence: 0x858575, water: 0x5f7774, wreck: 0x868e8c, container: 0x858575, roadblock: 0x858575,
+  fence: 0x858575, water: 0x5f7774, wreck: 0x868e8c, container: 0x858575, roadblock: 0x858575, supplyCrate: 0x969991,
 };
 
 export interface FpsView { unitId: number; yaw: number; pitch: number; aiming?: boolean }
@@ -40,6 +42,7 @@ export interface FpsView { unitId: number; yaw: number; pitch: number; aiming?: 
 interface SoldierVisual {
   group: THREE.Group;
   animator: SoldierAnimator | null;
+  creatureAnimator?: CreatureAnimator;
   combat: CombatAnimation;
   body: THREE.Group;
   weapon: THREE.Group;
@@ -259,7 +262,7 @@ export class ThreeBattle {
       this.dummy.scale.set(h ? 0.96 : 0, h, h ? 0.96 : 0);
       // Des troncs et obstacles plus fins permettent de mieux lire le terrain.
       if (tile.terrain === 'tree') this.dummy.scale.set(0.18, Math.max(h, 1.2), 0.18);
-      if (this.modernDecor && ['sandbag', 'wreck', 'container', 'roadblock'].includes(tile.terrain)) this.dummy.scale.set(0, 0, 0);
+      if (this.modernDecor && ['sandbag', 'wreck', 'container', 'roadblock', 'supplyCrate'].includes(tile.terrain)) this.dummy.scale.set(0, 0, 0);
       this.dummy.updateMatrix();
       this.structures.setMatrixAt(i, this.dummy.matrix);
       this.color.set(this.modernDecor && (tile.terrain === 'wall' || tile.terrain === 'urbanWall') ? 0xa7aba5 :
@@ -282,13 +285,13 @@ export class ThreeBattle {
       const group = new THREE.Group();
       const body = new THREE.Group();
       const model = cloneSkeleton(this.creatureModel);
-      model.scale.setScalar(0.8);
+      model.scale.setScalar(CREATURE_MODEL_SCALE);
       body.add(model); group.add(body);
-      const marker = new THREE.Mesh(new THREE.RingGeometry(0.48, 0.56, 32),
+      const marker = new THREE.Mesh(new THREE.RingGeometry(0.96, 1.12, 32),
         new THREE.MeshBasicMaterial({ color: factionDef(unit.faction).colorBright, side: THREE.DoubleSide }));
       marker.rotation.x = -Math.PI / 2; marker.position.y = 0.025; group.add(marker);
       const weapon = new THREE.Group();
-      return { group, body, weapon, marker, animator: null,
+      return { group, body, weapon, marker, animator: null, creatureAnimator: new CreatureAnimator(body, model, unit),
         combat: new CombatAnimation(body, weapon, null, unit, true), custom: true, model: null,
         ragdoll: null, ragdollAttempted: true, deathStarted: false, deathAnimated: false, deathElapsed: 0 };
     }
@@ -462,19 +465,16 @@ export class ThreeBattle {
       }
       const { group, animator, combat, marker } = visual;
       group.visible = (unit.alive || unit.hp <= 0) && unit.id !== player?.id;
-      if (marker) marker.visible = unit.alive;
-      group.position.set(unit.alive ? lerp(unit.prevX, unit.x, alpha) : unit.x, 0, unit.alive ? lerp(unit.prevY, unit.y, alpha) : unit.y);
+      if (marker) marker.visible = unit.alive && unit.wound?.carriedBy == null;
+      // Pose horizontale simple, sur l'épaule : aucune prétention d'animation dédiée.
+      const carried = unit.state === 'wounded' && unit.wound?.carriedBy != null;
+      group.position.set(unit.alive ? lerp(unit.prevX, unit.x, alpha) : unit.x, carried ? 0.84 : 0, unit.alive ? lerp(unit.prevY, unit.y, alpha) : unit.y);
       group.rotation.y = Math.PI / 2 - unit.facing;
       group.scale.y = unit.alive && unit.state === 'pinned' ? 0.65 : 1;
       const dead = !unit.alive && unit.hp <= 0;
       if (unit.defId === 'creature' && this.creatureModel) {
-        // Pas de clips dans le GLB : seul le corps entier oscille et se penche.
-        const moving = Math.hypot(unit.x - unit.prevX, unit.y - unit.prevY) > 0.005;
-        const phase = renderTick * 0.7;
-        visual.body.position.y = dead ? 0 : moving ? Math.abs(Math.sin(phase)) * 0.045 : 0;
-        visual.body.position.z = dead ? 0 : Math.min(1, unit.burstLeft * 2) * 0.14;
-        visual.body.rotation.x = dead ? -0.65 : (moving ? Math.sin(phase) * 0.025 : 0) - Math.min(1, unit.burstLeft * 2) * 0.10;
-        visual.body.rotation.z = dead ? 0.65 : moving ? Math.sin(phase) * 0.04 : 0;
+        // Animation procédurale du squelette original ; ne modifie jamais la simulation.
+        visual.creatureAnimator?.update(unit, renderTick, animationDelta);
         continue;
       }
       if (dead && visual.model && !visual.ragdollAttempted) {
@@ -497,7 +497,7 @@ export class ThreeBattle {
       }
       if (!visual.ragdoll) {
         combat.beforeMixer();
-        animator?.update(soldierMotion(unit), animationDelta, unit, renderTick);
+        animator?.update(unit.state === 'wounded' ? 'idle' : soldierMotion(unit), animationDelta, unit, renderTick);
         combat.update(unit, animationDelta);
         if (unit.alive && visual.model) {
           const reloadTime = weaponDef(unitDef(unit.defId).weapon).reloadTime;

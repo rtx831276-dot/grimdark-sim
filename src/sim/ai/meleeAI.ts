@@ -3,6 +3,7 @@ import type { Vec2 } from '../../core/ids';
 import { unitDef } from '../../data/units';
 import { weapon } from '../../data/weapons';
 import { lineOfSight } from '../los';
+import { meleeEngagementRange } from '../combat';
 import { isSolid } from '../map';
 import { followPath } from '../movement';
 import { findPath } from '../pathfinding';
@@ -30,7 +31,7 @@ export function selectMeleeTarget(state: SimState, unit: Unit): Unit | null {
   let best: Unit | null = null;
   let bestScore = Number.NEGATIVE_INFINITY;
   for (const enemy of state.units) {
-    if (!enemy.alive || enemy.faction === unit.faction) continue;
+    if (!enemy.alive || enemy.state === 'wounded' || enemy.faction === unit.faction) continue;
     const dist = distance(unit.x, unit.y, enemy.x, enemy.y);
     const visible = dist <= def.vision && lineOfSight(state.map, unit.x, unit.y, enemy.x, enemy.y).visible;
     const report = dist <= def.vision + COMMS_RADIUS ? reportForTarget(state, unit, enemy) : null;
@@ -52,7 +53,7 @@ export function selectMeleeTarget(state: SimState, unit: Unit): Unit | null {
 
 /** Positions de contact praticables, classées par proximité et encombrement allié. */
 export function meleeApproachSlots(state: SimState, unit: Unit, target: Unit): Vec2[] {
-  const range = weapon(unitDef(unit.defId).weapon).range;
+  const range = meleeEngagementRange(weapon(unitDef(unit.defId).weapon).range, target);
   const cx = Math.floor(target.x);
   const cy = Math.floor(target.y);
   const slots: Array<{ point: Vec2; score: number }> = [];
@@ -86,7 +87,7 @@ export function meleeApproachSlots(state: SimState, unit: Unit, target: Unit): V
  * faire converger tous les attaquants sur la même case ; A* reste borné et espacé.
  */
 export function pursueMeleeTarget(state: SimState, unit: Unit, target: Unit, dt: number): void {
-  const range = weapon(unitDef(unit.defId).weapon).range;
+  const range = meleeEngagementRange(weapon(unitDef(unit.defId).weapon).range, target);
   const currentGoalStillUseful = unit.pathGoal && unit.path.length > 0 &&
     distance(unit.pathGoal.x, unit.pathGoal.y, target.x, target.y) <= range + 0.8 &&
     lineOfSight(state.map, unit.pathGoal.x, unit.pathGoal.y, target.x, target.y).visible;

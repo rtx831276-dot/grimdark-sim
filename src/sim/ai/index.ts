@@ -29,7 +29,7 @@ import { updateCreature } from './creatureAI';
  */
 export function updateAi(state: SimState, dt: number, controlledUnitId?: number): void {
   for (const unit of state.units) {
-    if (!unit.alive || unit.id === controlledUnitId) continue;
+    if (!unit.alive || unit.state === 'wounded' || unit.rescue || unit.logisticsTask || unit.id === controlledUnitId) continue;
     if (unit.defId === 'creature') updateCreature(state, unit, dt);
     else updateSoldier(state, unit, dt);
   }

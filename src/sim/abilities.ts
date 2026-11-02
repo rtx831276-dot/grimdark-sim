@@ -47,8 +47,8 @@ export const HEAL_MIN_MISSING = 8;
 /** Soigne un allié vivant, proche et visible ; ne ressuscite jamais. */
 export function useHeal(state: SimState, healer: Unit, target: Unit): boolean {
   const slot = healer.abilities.heal;
-  if (!healer.alive || healer.state === 'broken' || !unitDef(healer.defId).abilities.includes('heal') ||
-      !slot || slot.charges <= 0 || slot.cooldown > 0 || !target.alive || target.hp <= 0 ||
+  if (!healer.alive || healer.rescue || healer.state === 'wounded' || healer.state === 'broken' || !unitDef(healer.defId).abilities.includes('heal') ||
+      !slot || slot.charges <= 0 || slot.cooldown > 0 || !target.alive || target.state === 'wounded' || target.hp <= 0 ||
       target.id === healer.id || target.faction !== healer.faction || target.hp >= target.maxHp ||
       distance(healer.x, healer.y, target.x, target.y) > HEAL_RANGE ||
       !lineOfSight(state.map, healer.x, healer.y, target.x, target.y).visible) return false;
@@ -65,7 +65,7 @@ export function useHeal(state: SimState, healer: Unit, target: Unit): boolean {
 export function woundedAllyFor(state: SimState, healer: Unit): Unit | null {
   let best: Unit | null = null;
   for (const target of state.units) {
-    if (!target.alive || target.hp <= 0 || target.id === healer.id || target.faction !== healer.faction ||
+    if (!target.alive || target.state === 'wounded' || target.hp <= 0 || target.id === healer.id || target.faction !== healer.faction ||
         target.maxHp - target.hp < HEAL_MIN_MISSING ||
         distance(healer.x, healer.y, target.x, target.y) > HEAL_RANGE ||
         !lineOfSight(state.map, healer.x, healer.y, target.x, target.y).visible) continue;
@@ -81,7 +81,7 @@ export function woundedAllyFor(state: SimState, healer: Unit): Unit | null {
  * rebondir sur le décor et exploser ailleurs que sur le point visé.
  */
 export function useGrenade(state: SimState, unit: Unit, x: number, y: number): boolean {
-  if (!unit.alive || unit.state === 'broken' || !Number.isFinite(x) || !Number.isFinite(y) || !inBounds(state.map, Math.floor(x), Math.floor(y))) return false;
+  if (!unit.alive || unit.rescue || unit.state === 'wounded' || unit.state === 'broken' || !Number.isFinite(x) || !Number.isFinite(y) || !inBounds(state.map, Math.floor(x), Math.floor(y))) return false;
   const def = unitDef(unit.defId);
   if (!def.abilities.includes('grenade')) return false;
   const slot = unit.abilities.grenade;
@@ -205,7 +205,7 @@ export function callArtilleryStrike(state: SimState, faction: FactionId, x: numb
 
 /** Capacité « charge » : assaut fanatique, bref mais presque impossible à arrêter. */
 export function useCharge(state: SimState, unit: Unit): boolean {
-  if (!unit.alive || unit.state === 'broken') return false;
+  if (!unit.alive || unit.rescue || unit.state === 'wounded' || unit.state === 'broken') return false;
   const def = unitDef(unit.defId);
   if (!def.abilities.includes('charge')) return false;
   const slot = unit.abilities.charge;

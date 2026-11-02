@@ -9,6 +9,7 @@ export function modernDecorParts(map: GameMap): DecorPart[] {
   const parts: DecorPart[] = [];
   const at = (x: number, z: number): TerrainId | undefined =>
     x < 0 || z < 0 || x >= map.width || z >= map.height ? undefined : map.tiles[z * map.width + x]?.terrain;
+  const hospitalTiles = new Set(Object.values(map.def.hospitals ?? {}).filter(p => p != null).map(p => `${Math.floor(p.x)},${Math.floor(p.y)}`));
   const wall = (t: TerrainId | undefined) => t === 'wall' || t === 'urbanWall' || t === 'churchWall' || t === 'tower';
   const add = (x: number, y: number, z: number, sx: number, sy: number, sz: number, color: number) =>
     parts.push({ x, y, z, sx, sy, sz, color });
@@ -33,6 +34,15 @@ export function modernDecorParts(map: GameMap): DecorPart[] {
         for (let n = 0; n < 4; n++)
           add(x + 0.18 + n * 0.21, 0.019, z + 0.5, 0.105, 0.012, 0.72, 0xcaccc0);
     }
+    // Dalles et places de stationnement : marquages plats, sans collision.
+    if (t === 'pavement') {
+      add(x + 0.5, 0.008, z + 0.04, 0.96, 0.012, 0.018, 0x7f8580);
+      add(x + 0.04, 0.008, z + 0.5, 0.018, 0.012, 0.96, 0x7f8580);
+      if ((x + z * 3) % 11 === 0)
+        add(x + 0.5, 0.012, z + 0.5, 0.62, 0.01, 0.035, 0xb3b4a5);
+      if ((x * 7 + z * 13) % 17 === 0)
+        add(x + 0.56, 0.011, z + 0.38, 0.35, 0.01, 0.22, 0x7c8179);
+    }
     // Fenêtres sombres et linteaux sur les façades exposées, visibles de tous les angles.
     if (wall(t)) {
       const h = TERRAIN[t!].height * 0.82;
@@ -42,12 +52,29 @@ export function modernDecorParts(map: GameMap): DecorPart[] {
         add(px, h * 0.58, pz, dx ? 0.025 : 0.48, h * 0.35, dx ? 0.48 : 0.025, 0x344a4d);
         add(px, h * 0.78, pz, dx ? 0.035 : 0.56, 0.055, dx ? 0.56 : 0.035, 0xb9b9aa);
         add(px, h * 0.39, pz, dx ? 0.035 : 0.56, 0.04, dx ? 0.56 : 0.035, 0xb1b3a6);
+        // Panneaux d'ateliers fixés au-dessus des fenêtres et orientés vers la rue.
+        if (map.def.id === 'carrefour-infini' && z === 2 && (x === 14 || x === 31) && dz === 1) {
+          add(px, h * 0.88, pz + 0.025, 0.72, 0.20, 0.035, x === 14 ? 0x536e69 : 0x847457);
+          add(px, h * 0.88, pz + 0.045, 0.49, 0.025, 0.012, 0xc4c6b4);
+        }
+        // Une enseigne médicale par bâtiment, fixée au mur au-dessus de l'entrée.
+        if (map.def.hospitals && z === 9 && (x === 5 || x === 39) && dz === 1) {
+          add(px, h * 0.86, pz + 0.024, 0.6, 0.32, 0.04, 0xe6e1d4);
+          add(px, h * 0.86, pz + 0.05, 0.10, 0.23, 0.015, 0xb2443f);
+          add(px, h * 0.86, pz + 0.052, 0.24, 0.075, 0.016, 0xb2443f);
+        }
         // Quelques fenêtres barricadées suggèrent un quartier évacué.
         if ((x * 17 + z * 11) % 4 === 0)
           add(px + dx * 0.02, h * 0.58, pz + dz * 0.02, dx ? 0.03 : 0.5, 0.055, dx ? 0.5 : 0.03, 0x8a7963);
         else
           add(px + dx * 0.015, h * 0.58, pz + dz * 0.015, dx ? 0.02 : 0.025, h * 0.34, dx ? 0.025 : 0.02, 0x77827c);
       }
+    }
+    // Croix au sol, sur la destination de soins : elle subsiste si les murs tombent.
+    if (hospitalTiles.has(`${x},${z}`)) {
+      add(x + 0.5, 0.018, z + 0.5, 0.8, 0.02, 0.8, 0xe6e1d4);
+      add(x + 0.5, 0.032, z + 0.5, 0.19, 0.01, 0.61, 0xb2443f);
+      add(x + 0.5, 0.033, z + 0.5, 0.61, 0.01, 0.19, 0xb2443f);
     }
     // Chaque élément ci-dessous correspond à une vraie tuile solide et destructible.
     // Les volumes restent dans l'empreinte de cette tuile ; ils disparaissent dès
@@ -77,6 +104,15 @@ export function modernDecorParts(map: GameMap): DecorPart[] {
       for (const side of [-1, 1]) for (const n of [-0.3, 0, 0.3]) {
         add(x + 0.5 + n, h / 2, z + 0.5 + side * 0.48, 0.035, h * 0.9, 0.02, 0x809087);
         add(x + 0.5 + side * 0.48, h / 2, z + 0.5 + n, 0.02, h * 0.9, 0.035, 0x809087);
+      }
+    }
+    if (t === 'supplyCrate') {
+      const h = 1.0 * 0.82;
+      add(x + 0.5, h / 2, z + 0.5, 0.96, h, 0.96, 0x867b60);
+      add(x + 0.5, h - 0.025, z + 0.5, 0.96, 0.05, 0.96, 0xa19578);
+      for (const side of [-1, 1]) for (const n of [-0.3, 0.3]) {
+        add(x + 0.5 + n, h / 2, z + 0.5 + side * 0.482, 0.07, h * 0.9, 0.018, 0xb0a080);
+        add(x + 0.5 + side * 0.482, h / 2, z + 0.5 + n, 0.018, h * 0.9, 0.07, 0xb0a080);
       }
     }
     if (t === 'roadblock') {

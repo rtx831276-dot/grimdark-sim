@@ -39,7 +39,7 @@ export function updateMeleeDodges(state: SimState, controlledUnitId?: number): v
   for (const unit of state.units) {
     if (unit.id === controlledUnitId) continue;
     if (unit.meleeDodge) { stepDodge(state, unit); continue; }
-    if (!unit.alive || unit.state === 'broken' || unit.state === 'pinned' || unit.meleeAttack?.resolved || unit.goal ||
+    if (!unit.alive || unit.state === 'wounded' || unit.rescue || unit.state === 'broken' || unit.state === 'pinned' || unit.meleeAttack?.resolved || unit.goal ||
         unit.stance !== 'advance' || state.tick < unit.nextDodgeTick || !['unarmed', 'modern_sword'].includes(weapon(unitDef(unit.defId).weapon).id)) continue;
     const attacker = state.units.find(other => {
       const attack = other.meleeAttack;

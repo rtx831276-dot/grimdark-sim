@@ -10,12 +10,12 @@ export const SUPPRESSION_PINNED = 55;
 
 /** Une unité compte encore dans l'ordre de bataille si elle tient la ligne. */
 export function isEffective(unit: Unit): boolean {
-  return unit.alive && unit.state !== 'broken';
+  return unit.alive && unit.state !== 'broken' && unit.state !== 'wounded';
 }
 
 /** Applique une perte de moral, en tenant compte de la discipline. */
 export function applyMoraleShock(state: SimState, unit: Unit, amount: number, label?: string): void {
-  if (!unit.alive) return;
+  if (!unit.alive || unit.state === 'wounded') return;
   const def = unitDef(unit.defId);
   const resistance = clamp(1 - def.discipline * 0.55, 0.2, 1);
   unit.morale = clamp(unit.morale - amount * resistance, 0, 100);
@@ -26,7 +26,7 @@ export function applyMoraleShock(state: SimState, unit: Unit, amount: number, la
 
 /** Ajoute de la suppression (balles qui claquent autour, explosions proches). */
 export function addSuppression(state: SimState, unit: Unit, amount: number): void {
-  if (!unit.alive) return;
+  if (!unit.alive || unit.state === 'wounded') return;
   // Fureur de charge : la doctrine promet un assaut de huit secondes presque impossible à
   // arrêter (docs/GAME_DESIGN.md). Sans ce garde, un tir nourri cloue l'unité en pleine charge.
   if (unit.chargeTicks > 0) return;
@@ -102,7 +102,7 @@ export function leaderWithin(state: SimState, unit: Unit, radius = 8): Unit | nu
 
 /** Récupération (ou érosion) du moral et de la suppression, appelée à chaque tick. */
 export function updateMorale(state: SimState, unit: Unit, dt: number): void {
-  if (!unit.alive) return;
+  if (!unit.alive || unit.state === 'wounded') return;
   const def = unitDef(unit.defId);
   unit.sinceUnderFire += dt;
 

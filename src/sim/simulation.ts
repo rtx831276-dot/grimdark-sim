@@ -1,3 +1,5 @@
+import { assignNearbyMedics, assignRescue, cancelRescue, syncCarriedPatients, updateMedical, updateRescueTasks } from './medical';
+import { cancelLogistics, updateLogistics } from './logistics';
 import type { FactionId, Vec2 } from '../core/ids';
 import { clamp } from '../core/math';
 import { hashString, Rng } from '../core/rng';
@@ -72,6 +74,7 @@ export function createSimulation(options: SimulationOptions = {}): SimState {
     } : null,
     units: [],
     projectiles: [],
+    supplyCaches: mapDef.logistics ? map.tiles.flatMap((tile, i) => tile.terrain === 'supplyCrate' ? [{ x: i % map.width + 0.5, y: Math.floor(i / map.width) + 0.5, ammo: 60, medicine: 6, grenades: 3, nextRestockTick: 600 }] : []) : [],
     events: [],
     communications: { reports: [], nextSpeakerTick: {}, nextFactionTick: Object.fromEntries(FACTION_IDS.map((id) => [id, 0])) },
     factions,
@@ -171,6 +174,8 @@ function createUnit(state: SimState, faction: FactionId, defId: string, x: numbe
     nextDodgeTick: 0,
     deathImpulse: null,
     salvosLeft: weapon(def.weapon).reloadEvery || Number.MAX_SAFE_INTEGER,
+    reserveSalvos: state.map.def.logistics && def.weapon !== 'creature_claw' && weapon(def.weapon).ammo >= 0 ? Math.max(0, Math.floor(weapon(def.weapon).ammo / weapon(def.weapon).burst) - weapon(def.weapon).reloadEvery) : undefined,
+    bandages: state.map.def.logistics && defId !== 'creature' ? 1 : undefined,
     reloading: false,
     burstLeft: 0,
     burstTargetId: null,
@@ -205,6 +210,7 @@ export function stepSimulation(state: SimState, dt: number = SIM_DT, direct?: Di
     unit.prevX = unit.x;
     unit.prevY = unit.y;
     if (unit.cooldown > 0) unit.cooldown = Math.max(0, unit.cooldown - dt);
+    if (unit.reloading && unit.cooldown <= 0) unit.reloading = false;
     if (unit.burstLeft > 0) unit.burstLeft = Math.max(0, unit.burstLeft - dt * 8);
     updateAbilityCooldowns(state, unit, dt);
     updateMorale(state, unit, dt);
@@ -219,12 +225,17 @@ export function stepSimulation(state: SimState, dt: number = SIM_DT, direct?: Di
       for (const id of ids) delete state.communications.nextSpeakerTick[id];
     }
   }
+  updateMedical(state);
   updateRespawns(state);
   updateCommunications(state);
+  assignNearbyMedics(state, direct?.unitId);
+  updateLogistics(state, dt, direct?.unitId);
   updateAi(state, dt, direct?.unitId);
+  updateRescueTasks(state, dt);
   if (direct) updateDirectControl(state, direct, dt);
   updateMeleeDodges(state, direct?.unitId);
   separateUnits(state, dt);
+  syncCarriedPatients(state);
   updateMeleeAttacks(state);
   updateProjectiles(state, dt);
   updateObjectives(state);
@@ -374,6 +385,13 @@ function checkVictory(state: SimState): void {
 /** Applique un ordre. Retourne false si aucune unité n'a pu l'exécuter. */
 export function issueOrder(state: SimState, order: Order): boolean {
   switch (order.type) {
+    case 'rescue': {
+      const patient = state.units.find(unit => unit.id === order.target);
+      if (!patient) return false;
+      const carriers = selectUnits(state, order.units).filter(unit => unit.faction === patient.faction && unit.id !== patient.id);
+      carriers.sort((a, b) => Math.hypot(a.x - patient.x, a.y - patient.y) - Math.hypot(b.x - patient.x, b.y - patient.y) || a.id - b.id);
+      return carriers.some(carrier => assignRescue(state, carrier, patient));
+    }
     case 'move': {
       let accepted = 0;
       const units = [...new Map(selectUnits(state, order.units).map((unit) => [unit.id, unit])).values()];
@@ -385,6 +403,8 @@ export function issueOrder(state: SimState, order: Order): boolean {
         }
         const destination = destinations.get(unit.id);
         if (!destination) continue;
+        cancelRescue(state, unit);
+        cancelLogistics(unit);
         unit.meleeAttack = null;
         unit.meleeDodge = null;
         unit.goal = destination;
@@ -401,10 +421,12 @@ export function issueOrder(state: SimState, order: Order): boolean {
 
     case 'attack': {
       const target = state.units.find(unit => unit.id === order.target);
-      if (!target || !target.alive) return false;
+      if (!target || !target.alive || target.state === 'wounded') return false;
       let accepted = 0;
       for (const unit of selectUnits(state, order.units)) {
         if (unit.state === 'broken' || unit.faction === target.faction) continue;
+        cancelRescue(state, unit);
+        cancelLogistics(unit);
         unit.meleeAttack = null;
         unit.meleeDodge = null;
         unit.forcedTargetId = target.id;
@@ -424,6 +446,8 @@ export function issueOrder(state: SimState, order: Order): boolean {
         if (unit.state === 'broken') continue;
         unit.meleeAttack = null;
         unit.meleeDodge = null;
+        cancelRescue(state, unit);
+        cancelLogistics(unit);
         unit.stance = 'hold';
         unit.goal = null;
         unit.forcedTargetId = null;
@@ -439,6 +463,8 @@ export function issueOrder(state: SimState, order: Order): boolean {
       for (const unit of selectUnits(state, order.units)) {
         if (unit.state === 'broken') continue;
         unit.meleeDodge = null;
+        cancelRescue(state, unit);
+        cancelLogistics(unit);
         unit.stance = 'advance';
         unit.goal = null;
         unit.nextRepathTick = 0;
@@ -457,6 +483,8 @@ export function issueOrder(state: SimState, order: Order): boolean {
         if (!unit.alive) continue;
         unit.meleeAttack = null;
         unit.meleeDodge = null;
+        cancelRescue(state, unit);
+        cancelLogistics(unit);
         unit.stance = 'fallback';
         unit.goal = null;
         unit.forcedTargetId = null;
@@ -472,7 +500,7 @@ export function issueOrder(state: SimState, order: Order): boolean {
 
     case 'grenade': {
       for (const unit of selectUnits(state, order.units)) {
-        if (useGrenade(state, unit, order.x, order.y)) return true;
+        if (useGrenade(state, unit, order.x, order.y)) { cancelLogistics(unit); return true; }
       }
       return false;
     }
@@ -481,7 +509,8 @@ export function issueOrder(state: SimState, order: Order): boolean {
       let used = 0;
       for (const unit of selectUnits(state, order.units)) {
         const slot = unit.abilities.rally;
-        if (!slot || slot.charges <= 0 || slot.cooldown > 0) continue;
+        if (unit.rescue || !slot || slot.charges <= 0 || slot.cooldown > 0) continue;
+        cancelLogistics(unit);
         slot.charges--;
         slot.cooldown = 30;
         useRally(state, unit);
@@ -540,7 +569,7 @@ function selectUnits(state: SimState, ids: number[]): Unit[] {
   const selected: Unit[] = [];
   for (const id of ids) {
     const unit = state.units.find(candidate => candidate.id === id);
-    if (unit && unit.alive && unit.faction !== 'creature') selected.push(unit);
+    if (unit && unit.alive && unit.state !== 'wounded' && unit.faction !== 'creature') selected.push(unit);
   }
   return selected;
 }
@@ -576,6 +605,7 @@ export function hashState(state: SimState): number {
     for (const id of FACTION_IDS) parts.push(state.respawn.reserves[id] ?? 0);
     for (const entry of state.respawn.pending) parts.push(hashString(entry.faction), hashString(entry.defId), entry.atTick);
   }
+  for (const cache of state.supplyCaches) parts.push(cache.ammo, cache.medicine, cache.grenades, cache.nextRestockTick);
   for (const unit of state.units) {
     parts.push(
       unit.id,
@@ -595,6 +625,12 @@ export function hashState(state: SimState): number {
       unit.meleeDodge?.startTick ?? 0,
       unit.meleeDodge ? hashString(unit.meleeDodge.clip) : 0,
       unit.nextDodgeTick,
+      unit.state === 'wounded' ? 1 : 0, unit.wound?.bleedOutTick ?? 0,
+      unit.wound?.assignedTo ?? 0, unit.wound?.carriedBy ?? 0, unit.wound?.hospitalUntil ?? 0,
+      unit.rescue?.targetId ?? 0, unit.rescue?.stage === 'carrying' ? 2 : unit.rescue ? 1 : 0, unit.rescue?.automatic ? 1 : 0,
+      unit.salvosLeft, unit.reserveSalvos ?? -1, unit.bandages ?? -1,
+      unit.logisticsTask?.kind === 'supply' ? unit.logisticsTask.cache + 1 : 0,
+      unit.logisticsTask?.kind === 'selfHeal' ? unit.logisticsTask.until : 0,
     );
   }
   for (const projectile of state.projectiles) {

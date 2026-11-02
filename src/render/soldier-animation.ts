@@ -3,7 +3,7 @@ import { DODGE_CLIPS, MELEE_CLIPS, SWORD_CLIPS, SIM_DT, type Unit } from '../sim
 
 export type SoldierMotion = 'idle' | 'walk' | 'run';
 type MotionAction = 'walk' | 'run' | 'limp';
-type CombatMotion = Pick<Unit, 'alive' | 'hp' | 'maxHp'> & { meleeAttack?: Unit['meleeAttack']; meleeDodge?: Unit['meleeDodge']; intent?: string; facing?: number; reloading?: boolean; cooldown?: number; defId?: string };
+type CombatMotion = Pick<Unit, 'alive' | 'hp' | 'maxHp'> & { state?: Unit['state']; meleeAttack?: Unit['meleeAttack']; meleeDodge?: Unit['meleeDodge']; intent?: string; facing?: number; reloading?: boolean; cooldown?: number; defId?: string };
 
 // Les pistes filtrées sont immuables : les partager évite de recopier leurs courbes
 // pour chaque soldat et à chaque renfort. Chaque soldat garde son propre mixer.
@@ -157,19 +157,19 @@ export class SoldierAnimator {
         const progress = Math.max(0, Math.min(1, (renderTick - sequence.startTick) / (sequence.endTick - sequence.startTick)));
         action.time = action.getClip().duration * progress;
       } else {
-        if (this.activeKind === 'attack' || this.activeKind === 'dodge' || !unit.alive) {
+        if (this.activeKind === 'attack' || this.activeKind === 'dodge' || !unit.alive || unit.state === 'wounded') {
           this.active?.fadeOut(0.1);
           this.active = undefined;
           this.activeKind = undefined;
           this.attackKey = '';
           if (unit.alive && this.motion === 'idle') { this.idle?.reset().fadeIn(0.1).play(); if (this.idle) this.idle.paused = true; }
         }
-        if (dt > 0 && unit.alive && unit.hp < this.lastHp && !this.active && this.guard) {
+        if (dt > 0 && unit.alive && unit.state !== 'wounded' && unit.hp < this.lastHp && !this.active && this.guard) {
           // Réaction cosmétique : les dégâts ont déjà été décidés par la simulation.
           this.playCombat(this.guard, 'guard');
         } else if (dt > 0 && unit.alive && unit.intent === 'ralliement' && this.lastIntent !== 'ralliement' && !this.active && this.taunt) {
           this.playCombat(this.taunt, 'taunt');
-        } else if (dt > 0 && unit.alive && unit.intent === 'soins' && this.lastIntent !== 'soins' && (!this.active || this.activeKind === 'turn') && this.heal) {
+        } else if (dt > 0 && unit.alive && (unit.intent === 'soins' || unit.intent === 'premiers soins') && this.lastIntent !== unit.intent && (!this.active || this.activeKind === 'turn') && this.heal) {
           this.playCombat(this.heal, 'heal');
         }
       }

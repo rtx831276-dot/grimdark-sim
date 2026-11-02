@@ -95,7 +95,10 @@ export function renderBattle(options: RenderOptions): void {
       depth: depthOf(renderX, renderY),
       layer: 2,
       draw: () => {
-        if (unit.alive) {
+        if (unit.alive && unit.state === 'wounded') {
+          drawCorpse(ctx, unit, screen, camera.zoom);
+          drawWoundedMarker(ctx, screen.x, screen.y, camera.zoom);
+        } else if (unit.alive) {
           drawUnit(ctx, unit, screen, {
             selected: options.selection.has(unit.id),
             hovered: options.hoveredUnitId === unit.id,
@@ -142,6 +145,7 @@ export function renderBattle(options: RenderOptions): void {
   for (const drawable of drawables) drawable.draw();
 
   drawEffects(ctx, options.effects, camera, state);
+  drawHospitals(ctx, camera, state);
   drawOverlays(options);
   drawDragSelectionHint(options);
   drawGhostTarget(options);
@@ -522,6 +526,25 @@ export function unitScreenPosition(camera: Camera, unit: Unit): { x: number; y: 
 /** Factions présentes sur la carte (ordre stable, pour l'affichage). */
 export const RENDER_FACTION_ORDER = FACTION_IDS;
 
+/** Repères fixes : les postes restent fonctionnels même si leurs murs sont détruits. */
+function drawHospitals(ctx: CanvasRenderingContext2D, camera: Camera, state: SimState): void {
+  for (const [faction, point] of Object.entries(state.map.def.hospitals ?? {})) {
+    if (!point) continue;
+    const p = camera.worldToScreen(point.x, point.y);
+    ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(20, 25, 22, .85)'; ctx.fillRect(p.x - 37, p.y - 9, 74, 16);
+    ctx.fillStyle = '#f1c7be'; ctx.fillText('✚ HÔPITAL', p.x, p.y + 3);
+    ctx.strokeStyle = factionDef(faction).color; ctx.lineWidth = 1;
+    ctx.strokeRect(p.x - 37, p.y - 9, 74, 16);
+  }
+}
+function drawWoundedMarker(ctx: CanvasRenderingContext2D, x: number, y: number, zoom: number): void {
+  const size = Math.max(10, 12 * zoom);
+  ctx.fillStyle = 'rgba(25, 20, 18, .9)'; ctx.fillRect(x - size / 2, y - size - 5, size, size);
+  ctx.fillStyle = '#ef7e72'; ctx.font = `bold ${Math.round(size)}px sans-serif`; ctx.textAlign = 'center';
+  ctx.fillText('+', x, y - 6);
+}
+
 /** Calque transparent des commandes et effets sur la scène WebGL. */
 export function renderThreeOverlay(options: RenderOptions): void {
   const { ctx, camera, state } = options;
@@ -530,6 +553,7 @@ export function renderThreeOverlay(options: RenderOptions): void {
   for (const objective of state.map.objectives) {
     drawObjective(ctx, camera, objective.x, objective.y, objective.radius, objective.label, state.objectiveControl[objective.id] ?? null);
   }
+  drawHospitals(ctx, camera, state);
   for (const unit of state.units) {
     if (!unit.alive) continue;
     const p = camera.worldToScreen(lerp(unit.prevX, unit.x, options.alpha), lerp(unit.prevY, unit.y, options.alpha));
@@ -537,11 +561,13 @@ export function renderThreeOverlay(options: RenderOptions): void {
       ctx.strokeStyle = options.selection.has(unit.id) ? '#f0e2b0' : 'rgba(240,226,176,.5)';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.ellipse(p.x, p.y, 15 * camera.zoom, 7.5 * camera.zoom, 0, 0, Math.PI * 2);
+      const selectionSize = unit.defId === 'creature' ? 2 : 1;
+      ctx.ellipse(p.x, p.y, 15 * camera.zoom * selectionSize, 7.5 * camera.zoom * selectionSize, 0, 0, Math.PI * 2);
       ctx.stroke();
     }
+    if (unit.state === 'wounded') { drawWoundedMarker(ctx, p.x, p.y, camera.zoom); continue; }
     const w = 22 * camera.zoom;
-    const y = p.y - 38 * camera.zoom;
+    const y = p.y - (unit.defId === 'creature' ? 95 : 38) * camera.zoom;
     ctx.fillStyle = 'rgba(0,0,0,.7)';
     ctx.fillRect(p.x - w / 2 - 1, y - 1, w + 2, 5);
     ctx.fillStyle = unit.hp / unit.maxHp > 0.4 ? '#8fbd78' : '#d65d4d';

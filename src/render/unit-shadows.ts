@@ -32,7 +32,7 @@ export class UnitShadows {
     let count = 0;
     for (const unit of units) {
       if (!unit.alive || unit.id === fpsUnitId || count >= 96) continue;
-      const size = unit.defId === 'creature' ? 1.2 : 0.67;
+      const size = unit.defId === 'creature' ? 2.4 : 0.67;
       this.dummy.position.set(lerp(unit.prevX, unit.x, alpha), 0.014, lerp(unit.prevY, unit.y, alpha));
       this.dummy.scale.set(size, size * 0.7, 1);
       this.dummy.updateMatrix();

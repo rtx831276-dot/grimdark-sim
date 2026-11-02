@@ -105,6 +105,7 @@ export class CombatAnimation {
   update(unit: CombatSnapshot, dt: number): void {
     const dead = !unit.alive && unit.hp <= 0;
     const escaped = !unit.alive && unit.hp > 0;
+    const incapacitated = unit.state === 'wounded';
     if (dt > 0) {
       this.flashTime = Math.max(0, this.flashTime - dt);
       if (unit.shotsFired > this.lastShots && unit.alive) { this.recoil = 1; this.flashTime = 0.09; }
@@ -117,10 +118,11 @@ export class CombatAnimation {
       this.wounded += (wounded - this.wounded) * Math.min(1, dt * 3);
       this.recoil = Math.max(0, this.recoil - dt * 5);
       this.hurt = Math.max(0, this.hurt - dt * 2.5);
-      if (dead) this.death = Math.min(1, this.death + dt / 0.7);
+      if (dead || incapacitated) this.death = Math.min(1, this.death + dt / 0.7);
+      else this.death = Math.max(0, this.death - dt / 0.7);
     }
     const collapse = 1 - Math.pow(1 - this.death, 2);
-    const aliveWeight = unit.alive ? 1 : 0;
+    const aliveWeight = unit.alive && !incapacitated ? 1 : 0;
     this.body.visible = !escaped;
     const swing = this.melee && !this.clipDriven ? Math.sin(Math.PI * (1 - this.recoil)) * (this.recoil > 0 ? 1 : 0) : 0;
     this.body.rotation.x = collapse * Math.PI / 2 + swing * 0.18 - (this.melee ? 0 : this.recoil * 0.14) - this.hurt * 0.22 * aliveWeight + this.wounded * 0.1 * aliveWeight;
@@ -137,7 +139,7 @@ export class CombatAnimation {
     this.body.updateWorldMatrix(true, true);
     this.body.getWorldQuaternion(this.rootRotation);
     for (const arm of this.arms) {
-      if (!arm.bone.parent || this.aim < 0.001 || dead) continue;
+      if (!arm.bone.parent || this.aim < 0.001 || dead || incapacitated) continue;
       arm.bone.parent.getWorldQuaternion(this.parentRotation).invert();
       this.worldAxis.set(-1, 0, 0).applyQuaternion(this.rootRotation).applyQuaternion(this.parentRotation).normalize();
       const punch = this.melee && (arm.bone.name === 'RightArm' || arm.bone.name === 'mixamorigRightArm') ? swing * 0.7 : 0;

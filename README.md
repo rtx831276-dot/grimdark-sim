@@ -11,7 +11,7 @@ Les camps disposent de combattants à mains nues, de porteurs de lame, de pistol
 de fusils et de grenadiers, plus un chef et un médecin. Les quatre modèles d'armes
 Meshy sont intégrés. La lame utilise des frappes synchronisées et une zone de contact
 tactique ; les tirs utilisent précision, portée, ligne de vue et rechargement (les
-munitions ne sont pas limitées). Une grenade peut toucher les alliés. Voir
+munitions restent illimitées dans les anciens scénarios). Une grenade peut toucher les alliés. Voir
 `src/assets/weapons/README.md` pour les modèles et leurs limites.
 
 Sélectionnez des soldats au clic gauche (ou avec un cadre), donnez un ordre au clic
@@ -206,7 +206,7 @@ Le zoom FPS réduit aussi la dispersion des tirs balistiques ; elle augmente en 
 
 ### Créature indépendante
 
-La bataille sans fin accueille une créature hostile aux deux camps : elle poursuit le soldat visible le plus proche et frappe au contact. Elle peut être blessée et tuée comme les autres unités, puis réapparaît après 10 secondes de simulation. Elle ne capture pas les objectifs et ne reçoit pas d’ordres. Le modèle fourni ne contient aucun clip d’animation : les oscillations et les attaques sont représentées par un mouvement simple de tout le modèle, sans animation des pattes ni ragdoll dédié. Les collisions restent approximatives.
+La bataille sans fin accueille une créature hostile aux deux camps : elle poursuit le soldat visible le plus proche et frappe au contact. Elle peut être blessée et tuée comme les autres unités, puis réapparaît après 10 secondes de simulation. Elle ne capture pas les objectifs et ne reçoit pas d’ordres. Le modèle fourni ne contient aucun clip d’animation ; son squelette est animé de manière procédurale, sans ragdoll dédié. Les collisions restent approximatives.
 
 ### Balistique des armes à feu
 
@@ -227,3 +227,23 @@ Un ciel voilé procédural accompagne la rotation de la caméra. Les tirs, impac
 ### Quartier Carrefour
 
 La carte de bataille sans fin conserve ses limites de 44 × 34 tuiles. L'avenue est-ouest relie les deux camps ; deux rues secondaires desservent les bâtiments et le dépôt au sud ; les façades ont été rehaussées à l'échelle des soldats. Épaves, conteneurs et barrages en béton créent de nouveaux angles de combat : ces obstacles sont des tuiles solides, bloquent les déplacements et la ligne de vue tactique, et peuvent devenir des gravats praticables sous les explosions ou les tirs qui endommagent le terrain. Les véhicules sont des épaves fixes, pas des véhicules pilotables ; chaque partie d'une épave ou d'un conteneur est détruite séparément. Les collisions des balles et grenades utilisent des volumes simplifiés, tandis que la ligne de vue tactique considère toute tuile solide comme opaque, même pour un barrage bas. Les bandes au sol, bordures basses et façades sont visuelles ; les décors sont instanciés et actualisés à la destruction du terrain. Le scénario Opération Carrefour initial reste inchangé.
+
+Le quartier infini comprend aussi deux rues de contournement, une rue des ateliers au nord et une rue du dépôt au sud, chacune avec son objectif. Deux ateliers accessibles et des cours bitumées diversifient les abords ; les caisses de ravitaillement sont des obstacles solides et destructibles. Les marquages des cours et les enseignes sont purement visuels. La carte reste délimitée et conserve ses zones de déploiement.
+
+### Carte tactique
+
+Une mini-carte repliable présente le terrain, les objectifs, les deux camps et la créature. Cliquer ou faire glisser dessus recentre la caméra ; quand elle est sélectionnée, les flèches du clavier permettent aussi de la déplacer. Le contour correspond à la vue tactique, y compris après rotation et zoom. La carte se masque en mode FPS et revient à la sortie. Elle montre toutes les unités vivantes : il n'y a pas de brouillard de guerre. Le fond n'est reconstruit que lorsque le terrain change ; cette interface ne donne aucun ordre aux soldats.
+
+### Autonomie et logistique (bataille sans fin)
+
+Les soldats disposent d’un bandage et, pour les armes à feu, de réserves limitées. Hors danger et sans ordre direct, ils prennent trois secondes pour les premiers soins quand leur vie tombe à 65 % ou moins. Les médecins soignent toujours les alliés proches. Les caisses intactes contiennent des munitions (comptées en salves), bandages, kits médicaux et grenades : les soldats libres ayant besoin de matériel se déplacent vers une caisse proche. Les stocks sont partagés entre les deux camps, limités et partiellement renouvelés toutes les 60 secondes tant que la caisse existe ; une caisse détruite n’est plus utilisable. En FPS, approchez-vous d’une caisse pour récupérer automatiquement les ressources nécessaires.
+
+Les médecins libres sont prioritaires pour évacuer un blessé proche ; à défaut, un allié disponible peut le transporter. Les ordres directs restent prioritaires ; les premiers soins et la recherche de ressources s’interrompent sous le feu. Un porteur continue son évacuation tant qu’il reste en état de le faire. Les blessés graves ne peuvent pas se soigner eux-mêmes. Ce sont des règles de simulation simplifiées, pas un système médical ou logistique réaliste complet.
+
+### Animation de la créature
+
+Le GLB de la créature ne comporte pas de clips d’animation. Son squelette est animé de façon procédurale : respiration, mouvements alternés des pattes et des ailes en déplacement, coup vers l’avant, réaction aux dégâts et chute progressive. L’animation suit les ticks et se fige en pause ; elle ne change ni les hitboxes ni les règles de combat. Les pattes ne sont pas verrouillées au sol et la chute n’est pas un ragdoll physique.
+
+### Créature bipède
+
+La créature est désormais deux fois plus grande et son torse est redressé sur ses pattes arrière ; ses pattes avant servent de bras. L'animation reste procédurale car son modèle d'origine ne contient pas de clips. La portée des griffes, le volume balistique et la sélection ont été adaptés. La navigation conserve une collision au sol simplifiée pour emprunter les rues : les ailes et le corps peuvent donc encore traverser visuellement certains éléments du décor, et les pieds ne sont pas verrouillés au sol.

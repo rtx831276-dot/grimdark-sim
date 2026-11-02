@@ -26,6 +26,8 @@ export * from './collision';
 export * from './grenade-physics';
 export * from './ballistics';
 export * from './abilities';
+export * from './medical';
+export * from './logistics';
 
 export type {
   GameMap,

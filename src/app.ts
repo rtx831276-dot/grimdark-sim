@@ -3,6 +3,8 @@ import { TERRAIN } from './data/terrain';
 import { FACTION_IDS } from './data/factions';
 import {
   createSimulation,
+  cancelRescue,
+  cancelLogistics,
   unitAt,
   isSolid,
   issueOrder,
@@ -21,6 +23,7 @@ import { weapon } from './data/weapons';
 import { directFireSpread, targetInSight } from './sim/direct-control';
 import { ballisticTargetInSight } from './sim/ballistics';
 import { Camera } from './render/camera';
+import { Minimap } from './render/minimap';
 import { Effects } from './render/effects';
 import { FpsFeedback } from './render/fps-feedback';
 import { BattleAudio } from './audio/battle-audio';
@@ -53,6 +56,8 @@ export class BattleApp {
   private view3d = false;
   private savedRotation = 0;
   private readonly hud: Hud;
+  private readonly minimap: Minimap | null;
+  private readonly minimapRoot: HTMLElement | null;
   private readonly controls: Controls;
   private readonly fpsControls: FpsControls;
   private fpsUnitId: number | null = null;
@@ -92,6 +97,9 @@ export class BattleApp {
     this.three = three;
     this.camera = new Camera(options.canvas.clientWidth || 1280, options.canvas.clientHeight || 720);
     this.state = this.createState(options.seed);
+    this.minimapRoot = document.getElementById('tactical-map');
+    const minimapCanvas = document.querySelector<HTMLCanvasElement>('#minimap');
+    this.minimap = minimapCanvas ? new Minimap(minimapCanvas, this.camera, () => this.state.map) : null;
 
     this.hud = new Hud(options.hudRoot, {
       onTogglePause: () => this.togglePause(),
@@ -147,6 +155,7 @@ export class BattleApp {
     this.running = false;
     this.fpsControls.dispose();
     this.controls.detach();
+    this.minimap?.dispose();
     this.three?.dispose();
     this.audio.dispose();
   }
@@ -200,7 +209,7 @@ export class BattleApp {
         for (const event of events) this.hud.logEvent(event);
         this.accumulator -= SIM_DT;
         steps++;
-        if (this.fpsUnitId !== null && !this.state.units.some(unit => unit.id === this.fpsUnitId && unit.alive)) {
+        if (this.fpsUnitId !== null && !this.state.units.some(unit => unit.id === this.fpsUnitId && unit.alive && unit.state !== 'wounded')) {
           this.exitFps();
           this.hud.logEvent({ tick: this.state.tick, type: 'orderRefused', label: 'Soldat contrôlé hors combat. Sélectionnez un autre soldat.' });
           break;
@@ -241,6 +250,7 @@ export class BattleApp {
     this.hudTimer += realDelta;
     if (this.hudTimer > 0.2) {
       this.hudTimer = 0;
+      if (this.fpsUnitId === null) this.minimap?.render(this.state, this.selection);
       this.hud.update(this.state, this.selectedUnits(), { speed: this.speed, paused: this.paused, mode: this.mode, flags: this.flags, view3d: this.view3d, threeAvailable: Boolean(this.three), fps: this.fpsUnitId !== null, soundEnabled: this.audio.enabled, soundAvailable: this.audio.available });
     }
 
@@ -319,6 +329,10 @@ export class BattleApp {
     const ids = this.selectionIds();
     if (ids.length === 0) return;
     const target = this.unitUnderPointer(world);
+    if (target?.state === 'wounded' && target.faction === this.selectedUnits()[0]?.faction) {
+      this.issueOrderForSelection({ type: 'rescue', units: ids, target: target.id });
+      return;
+    }
     if (target && target.faction !== this.selectedUnits()[0]?.faction) {
       this.issueOrderForSelection({ type: 'attack', units: ids, target: target.id });
       return;
@@ -390,10 +404,12 @@ export class BattleApp {
   private toggleFps(): void {
     if (this.fpsUnitId !== null) { this.exitFps(); return; }
     if (!this.three || !this.options.canvas3d || this.state.over) return;
-    const player = this.selectedUnits().find(unit => unit.faction !== 'creature') ?? this.state.units.find(unit => unit.alive && unit.faction === FACTION_IDS[0] && unit.defId === 'modern_rifleman') ?? this.state.units.find(unit => unit.alive && unit.faction !== 'creature');
+    const player = this.selectedUnits().find(unit => unit.faction !== 'creature' && unit.state !== 'wounded') ?? this.state.units.find(unit => unit.alive && unit.state !== 'wounded' && unit.faction === FACTION_IDS[0] && unit.defId === 'modern_rifleman') ?? this.state.units.find(unit => unit.alive && unit.state !== 'wounded' && unit.faction !== 'creature');
     if (!player) return;
     if (!this.view3d) this.toggleView();
     this.selection.clear(); this.selection.add(player.id);
+    cancelRescue(this.state, player);
+    cancelLogistics(player);
     // Annule les ordres et esquives IA en cours pour éviter qu'ils contredisent le joueur.
     player.goal = null; player.forcedTargetId = null; player.path = []; player.pathGoal = null; player.pathIndex = 0;
     player.meleeDodge = null; player.meleeAttack = null; player.stance = 'hold';
@@ -402,6 +418,7 @@ export class BattleApp {
     this.fpsFeedback.reset();
     this.fpsPreviousSpeed = this.speed; this.speed = 1; this.paused = true; this.accumulator = 0;
     this.fpsOverlay?.classList.remove('hidden');
+    if (this.minimapRoot) this.minimapRoot.hidden = true;
     this.fpsControls.activate(player.facing, weapon(unitDef(player.defId).weapon).kind !== 'melee');
     this.updateFpsOverlay();
   }
@@ -413,6 +430,7 @@ export class BattleApp {
     this.fpsControls.deactivate();
     this.controls.setEnabled(true);
     this.fpsOverlay?.classList.add('hidden');
+    if (this.minimapRoot) this.minimapRoot.hidden = false;
     this.speed = this.fpsPreviousSpeed;
     this.paused = true; this.accumulator = 0;
     this.refreshSelection();
@@ -431,7 +449,7 @@ export class BattleApp {
     const reloading = unit.reloading && unit.cooldown > 0 && gun.reloadTime > 0;
     setText('.fps-name', `${unitDef(unit.defId).label} · ${gun.label}${this.paused ? ' · PAUSE' : ''}`);
     setText('.fps-health-label', `VIE  ${Math.max(0, Math.ceil(unit.hp))} / ${unit.maxHp}`);
-    setText('.fps-ammo', reloading ? 'RECHARGEMENT…' : gun.reloadEvery ? `MUNITIONS  ${unit.salvosLeft * gun.burst} / ${gun.reloadEvery * gun.burst} · réserve ∞` : 'CORPS À CORPS');
+    setText('.fps-ammo', reloading ? 'RECHARGEMENT…' : gun.reloadEvery ? `MUNITIONS  ${unit.salvosLeft * gun.burst} / ${gun.reloadEvery * gun.burst} · réserve ${unit.reserveSalvos === undefined ? '∞' : unit.reserveSalvos * gun.burst}` : 'CORPS À CORPS');
     const healthFill = this.fpsOverlay.querySelector<HTMLElement>('.fps-health-fill');
     if (healthFill) { const width = `${health * 100}%`; if (healthFill.style.width !== width) healthFill.style.width = width; healthFill.classList.toggle('critical', health <= 0.35); }
     const reloadBar = this.fpsOverlay.querySelector<HTMLElement>('.fps-reload-bar');

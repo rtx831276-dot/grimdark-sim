@@ -12,7 +12,7 @@ export function updateCreature(state: SimState, creature: Unit, dt: number): voi
   let target: Unit | null = null;
   let closest = Infinity;
   for (const other of state.units) {
-    if (!other.alive || other.faction === creature.faction) continue;
+    if (!other.alive || other.state === 'wounded' || other.faction === creature.faction) continue;
     const dist = distance(creature.x, creature.y, other.x, other.y);
     if (dist > vision || dist > closest || !lineOfSight(state.map, creature.x, creature.y, other.x, other.y).visible) continue;
     if (dist < closest || other.id < (target?.id ?? Infinity)) { target = other; closest = dist; }
