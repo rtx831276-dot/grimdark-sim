@@ -3,6 +3,10 @@ import type { Rng } from '../core/rng';
 import type { MapDefinition, ObjectiveDef } from '../data/map-types';
 import type { TerrainId } from '../data/terrain';
 import type { AbilityId } from '../data/units';
+import type { MeleeClipName } from './melee-timing';
+import type { DodgeClipName } from './ai/meleeDodge';
+import type { GrenadeMotion } from './grenade-physics';
+import type { BulletMotion } from './ballistics';
 
 /* ------------------------------------------------------------------ *
  * Terrain
@@ -28,7 +32,7 @@ export interface GameMap {
  * Unités
  * ------------------------------------------------------------------ */
 
-export type UnitState = 'idle' | 'moving' | 'engaging' | 'pinned' | 'broken' | 'dead';
+export type UnitState = 'idle' | 'moving' | 'engaging' | 'pinned' | 'broken' | 'wounded' | 'dead';
 
 /** Posture : ce que l'unité fait quand elle n'a pas d'ordre direct. */
 export type Stance = 'advance' | 'hold' | 'fallback';
@@ -56,6 +60,17 @@ export interface Unit {
   state: UnitState;
   stance: Stance;
   alive: boolean;
+  /** Présent tant que le soldat est gravement blessé, jamais sur un mort. */
+  wound?: { bleedOutTick: number; assignedTo: number | null; carriedBy: number | null;
+    hospitalUntil: number | null; sourceId?: number; sourceFaction?: string };
+  /** Mission d'évacuation du porteur, exclusive d'un ordre de combat. */
+  rescue?: { targetId: number; stage: 'approach' | 'carrying'; automatic?: boolean };
+  /** Réserve en salves ; absent signifie munitions illimitées. */
+  reserveSalvos?: number;
+  bandages?: number;
+  logisticsTask?: { kind: 'supply'; cache: number; startedTick: number; destination: Vec2 } | { kind: 'selfHeal'; until: number };
+  /** Début de la conservation temporaire du corps ou de l’unité sortie. */
+  removedTick: number | null;
   /** Cible d'engagement courante. */
   targetId: number | null;
   /** Ordre explicite du joueur (destination). */
@@ -69,6 +84,12 @@ export interface Unit {
   /** Prochain tick où l'IA a le droit de recalculer un chemin. */
   nextRepathTick: number;
   cooldown: number;
+  /** Séquence de mêlée en cours, contrôlée par les ticks de simulation. */
+  meleeAttack: MeleeAttack | null;
+  meleeDodge: MeleeDodge | null;
+  nextDodgeTick: number;
+  /** Direction visuelle du dernier impact, sans effet sur les déplacements tactiques. */
+  deathImpulse: (Vec2 & { lift?: number }) | null;
   /** Salves restantes avant de devoir recharger (voir WeaponDef.reloadEvery). */
   salvosLeft: number;
   /** Vrai pendant un rechargement : le rendu peut l'afficher, l'IA n'y peut rien. */
@@ -93,6 +114,25 @@ export interface Unit {
   chargeTicks: number;
 }
 
+export interface MeleeDodge {
+  clip: DodgeClipName;
+  startTick: number;
+  endTick: number;
+  stepX: number;
+  stepY: number;
+}
+
+export interface MeleeAttack {
+  clip: MeleeClipName;
+  targetId: number;
+  /** Orientation verrouillée au lancement du coup. */
+  facing: number;
+  startTick: number;
+  impactTick: number;
+  endTick: number;
+  resolved: boolean;
+}
+
 /* ------------------------------------------------------------------ *
  * Projectiles (grenades, obus)
  * ------------------------------------------------------------------ */
@@ -102,7 +142,7 @@ export interface Projectile {
   faction: FactionId;
   ownerId: number;
   weaponId: string;
-  kind: 'grenade' | 'shell';
+  kind: 'grenade' | 'shell' | 'bullet';
   fromX: number;
   fromY: number;
   x: number;
@@ -113,6 +153,9 @@ export interface Projectile {
   impactTick: number;
   /** Durée totale du vol, pour l'animation de l'arc. */
   flightTicks: number;
+  /** Présent uniquement pour les grenades ; les obus conservent leur trajectoire actuelle. */
+  grenadeMotion?: GrenadeMotion;
+  bulletMotion?: BulletMotion;
 }
 
 /* ------------------------------------------------------------------ *
@@ -121,14 +164,26 @@ export interface Projectile {
 
 export type SimEventType =
   | 'shot'
+  | 'bulletTrace'
+  | 'melee'
+  | 'meleeImpact'
+  | 'dodge'
   | 'impact'
   | 'hit'
   | 'kill'
+  | 'respawn'
   | 'pinned'
   | 'broken'
   | 'fled'
   | 'recovered'
   | 'rally'
+  | 'healed'
+  | 'resupplied'
+  | 'wounded'
+  | 'rescueStarted'
+  | 'hospitalized'
+  | 'medicalRecovered'
+  | 'communication'
   | 'explosion'
   | 'terrainDestroyed'
   | 'grenadeThrown'
@@ -151,6 +206,10 @@ export interface SimEvent {
   weaponId?: string;
   amount?: number;
   radius?: number;
+  height?: number;
+  targetHeight?: number;
+  /** Une balle disparaît après cette portion (impact, sol ou portée). */
+  bulletEnd?: boolean;
   label?: string;
 }
 
@@ -183,6 +242,25 @@ export interface SimStats {
   tilesDestroyed: number;
 }
 
+/** Information partagée avec les alliés présents au moment de l'appel. */
+export interface TacticalReport {
+  senderId: number;
+  faction: FactionId;
+  targetId: number;
+  targetX: number;
+  targetY: number;
+  kind: 'contact' | 'help';
+  recipients: number[];
+  expiresTick: number;
+}
+
+export interface RespawnState {
+  delayTicks: number;
+  unlimited: boolean;
+  reserves: Record<FactionId, number>;
+  pending: Array<{ faction: FactionId; defId: string; atTick: number }>;
+}
+
 export interface SimState {
   tick: number;
   elapsed: number;
@@ -193,10 +271,18 @@ export interface SimState {
    */
   seed: number;
   map: GameMap;
+  respawn: RespawnState | null;
   units: Unit[];
   projectiles: Projectile[];
+  /** Stocks par caisse destructible ; aucune caisse sur les anciens scénarios. */
+  supplyCaches: Array<{ x: number; y: number; ammo: number; medicine: number; grenades: number; nextRestockTick: number }>;
   /** Événements du tick courant uniquement. */
   events: SimEvent[];
+  communications: {
+    reports: TacticalReport[];
+    nextSpeakerTick: Record<number, number>;
+    nextFactionTick: Record<FactionId, number>;
+  };
   factions: Record<FactionId, FactionRuntime>;
   /** Objectif -> faction qui le contrôle (null = contesté ou vide). */
   objectiveControl: Record<string, FactionId | null>;
@@ -217,6 +303,7 @@ export interface SimState {
 export type Order =
   | { type: 'move'; units: number[]; x: number; y: number }
   | { type: 'attack'; units: number[]; target: number }
+  | { type: 'rescue'; units: number[]; target: number }
   | { type: 'hold'; units: number[] }
   | { type: 'advance'; units: number[] }
   | { type: 'fallback'; units: number[] }

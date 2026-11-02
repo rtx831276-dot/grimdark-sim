@@ -11,16 +11,20 @@ import { worldDirectionToScreen } from './iso';
  * de la simulation, pour que les particules n'influencent pas le déroulement du combat.
  */
 export interface VisualEffect {
-  kind: 'tracer' | 'impact' | 'explosion' | 'smoke' | 'blood' | 'rally' | 'flag' | 'text';
+  kind: 'tracer' | 'bulletTrace' | 'impact' | 'explosion' | 'smoke' | 'blood' | 'rally' | 'flag' | 'text' | 'speech';
   x: number;
   y: number;
   fromX?: number;
   fromY?: number;
+  height?: number;
+  fromHeight?: number;
   ttl: number;
   maxTtl: number;
   radius?: number;
   color?: string;
   label?: string;
+  /** Émetteur de la bulle, pour la suivre quand il se déplace. */
+  unitId?: number;
   /** Graine fixe pour que l'effet reste identique d'une frame à l'autre. */
   seed?: number;
 }
@@ -38,6 +42,7 @@ export class Effects {
     for (const event of events) {
       switch (event.type) {
         case 'shot': {
+          if (event.label === 'ballistic') break; // la traînée et l'impact suivent la vraie balle
           this.list.push({
             kind: 'tracer',
             x: event.tx ?? event.x ?? 0,
@@ -57,6 +62,22 @@ export class Effects {
             radius: 0.16,
             seed: this.rng.int(1000),
           });
+          break;
+        }
+        case 'bulletTrace': {
+          this.list.push({kind: 'bulletTrace', fromX: event.x, fromY: event.y, fromHeight: event.height,
+            x: event.tx ?? 0, y: event.ty ?? 0, height: event.targetHeight, ttl: 0.1, maxTtl: 0.1});
+          break;
+        }
+        case 'impact': {
+          this.list.push({kind: 'impact', x: event.x ?? 0, y: event.y ?? 0, ttl: 0.3, maxTtl: 0.3, radius: 0.16});
+          break;
+        }
+        case 'melee':
+        case 'meleeImpact': {
+          if (event.type === 'melee' && (event.weaponId === 'unarmed' || event.weaponId === 'modern_sword')) break; // impact différé
+          this.list.push({ kind: 'impact', x: event.tx ?? event.x ?? 0, y: event.ty ?? event.y ?? 0,
+            ttl: 0.2, maxTtl: 0.2, radius: 0.12, seed: this.rng.int(1000) });
           break;
         }
         case 'hit': {
@@ -124,6 +145,16 @@ export class Effects {
             color: '#8a8374',
             seed: this.rng.int(1000),
           });
+          break;
+        }
+        case 'communication': {
+          this.list.push({ kind: 'speech', unitId: event.unitId, x: event.x ?? 0, y: event.y ?? 0,
+            ttl: 2.5, maxTtl: 2.5, label: event.label ?? 'Contact !' });
+          break;
+        }
+        case 'healed': {
+          this.list.push({ kind: 'text', x: event.x ?? 0, y: event.y ?? 0, ttl: 1.2, maxTtl: 1.2,
+            label: `+${Math.round(event.amount ?? 0)} VIE`, color: '#88dc96' });
           break;
         }
         case 'rally': {
@@ -216,10 +247,23 @@ export function drawEffects(
   ctx: CanvasRenderingContext2D,
   effects: Effects,
   camera: Camera,
+  state?: SimState,
+  hideBallisticTraces = false,
+  hide3dAtmosphere = false,
 ): void {
   for (const effect of effects.list) {
     const progress = 1 - effect.ttl / effect.maxTtl;
     switch (effect.kind) {
+      case 'bulletTrace': {
+        if (hideBallisticTraces || effect.fromX === undefined || effect.fromY === undefined) break;
+        const from = camera.worldToScreen(effect.fromX, effect.fromY);
+        const to = camera.worldToScreen(effect.x, effect.y);
+        ctx.strokeStyle = `rgba(255, 226, 165, ${0.85 * (1 - progress)})`;
+        ctx.lineWidth = 1.5; ctx.beginPath();
+        ctx.moveTo(from.x, from.y - (effect.fromHeight ?? 0) * 28 * camera.zoom);
+        ctx.lineTo(to.x, to.y - (effect.height ?? 0) * 28 * camera.zoom); ctx.stroke();
+        break;
+      }
       case 'tracer': {
         if (effect.fromX === undefined || effect.fromY === undefined) break;
         const from = camera.worldToScreen(effect.fromX, effect.fromY - 0.35);
@@ -250,6 +294,7 @@ export function drawEffects(
         break;
       }
       case 'explosion': {
+        if (hide3dAtmosphere) break;
         const p = camera.worldToScreen(effect.x, effect.y);
         const radius = (effect.radius ?? 2) * 24 * camera.zoom;
         const pulse = 1 - Math.pow(1 - progress, 2);
@@ -265,6 +310,7 @@ export function drawEffects(
         break;
       }
       case 'smoke': {
+        if (hide3dAtmosphere) break;
         const p = camera.worldToScreen(effect.x, effect.y);
         const drift = progress * 22 * camera.zoom;
         const radius = (effect.radius ?? 1.5) * 20 * camera.zoom * (0.6 + progress * 0.8);
@@ -302,6 +348,25 @@ export function drawEffects(
         ctx.font = '12px "Segoe UI", sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText(`⚑ ${effect.label ?? 'objectif'}`, p.x, p.y);
+        break;
+      }
+      case 'speech': {
+        const speaker = state?.units.find((unit) => unit.id === effect.unitId && unit.alive);
+        const p = camera.worldToScreen(speaker?.x ?? effect.x, speaker?.y ?? effect.y);
+        const label = effect.label ?? 'Contact !';
+        ctx.font = 'bold 11px "Segoe UI", sans-serif';
+        ctx.textAlign = 'center';
+        const width = ctx.measureText(label).width + 12;
+        const y = p.y - 58 * camera.zoom;
+        ctx.globalAlpha = Math.min(1, effect.ttl * 2);
+        ctx.fillStyle = 'rgba(20, 26, 24, 0.92)';
+        ctx.fillRect(p.x - width / 2, y - 14, width, 20);
+        ctx.strokeStyle = 'rgba(198, 218, 183, 0.8)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(p.x - width / 2, y - 14, width, 20);
+        ctx.fillStyle = '#eff6de';
+        ctx.fillText(label, p.x, y);
+        ctx.globalAlpha = 1;
         break;
       }
       case 'text': {

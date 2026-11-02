@@ -9,10 +9,16 @@
 export type TerrainId =
   | 'mud' // boue, terrain vague
   | 'road' // route pavée
+  | 'pavement' // place ou cour bitumée
   | 'crater' // cratère d'obus (couverture moyenne)
   | 'trench' // tranchée (forte couverture)
   | 'sandbag' // sacs de sable / parapet
   | 'rubble' // ruines, gravats (couverture moyenne, destructible)
+  | 'urbanWall' // façade de bâtiment moderne
+  | 'wreck' // épave de véhicule
+  | 'container' // conteneur de fret
+  | 'roadblock' // barrage en béton
+  | 'supplyCrate' // caisse de ravitaillement
   | 'wall' // mur de ruine (bloque la vue, destructible)
   | 'churchWall' // mur d'église (bloque la vue, très résistant)
   | 'tower' // beffroi (bloque la vue, quasi indestructible)
@@ -59,6 +65,11 @@ export const TERRAIN: Record<TerrainId, TerrainDef> = {
     height: 0,
     color: '#3f3a2a',
     topColor: '#4a4432',
+  },
+  pavement: {
+    id: 'pavement', label: 'Cour bitumée', solid: false, tileCover: 0.02, losCover: 0,
+    moveCost: 0.95, hp: 0, becomes: null, height: 0,
+    color: '#797e76', topColor: '#888e85',
   },
   road: {
     id: 'road',
@@ -124,6 +135,33 @@ export const TERRAIN: Record<TerrainId, TerrainDef> = {
     height: 0.3,
     color: '#5d584c',
     topColor: '#6b6558',
+  },
+  // Obstacles du quartier moderne : ils occupent réellement leur tuile, arrêtent
+  // les déplacements et deviennent des gravats quand une explosion les détruit.
+  urbanWall: {
+    id: 'urbanWall', label: 'Façade en béton', solid: true, tileCover: 0, losCover: 1,
+    moveCost: Number.POSITIVE_INFINITY, hp: 200, becomes: 'rubble', height: 2.5,
+    color: '#999e98', topColor: '#b0b3aa',
+  },
+  wreck: {
+    id: 'wreck', label: 'Épave de véhicule', solid: true, tileCover: 0, losCover: 1,
+    moveCost: Number.POSITIVE_INFINITY, hp: 130, becomes: 'rubble', height: 1.1,
+    color: '#5a6157', topColor: '#73786b',
+  },
+  container: {
+    id: 'container', label: 'Conteneur de fret', solid: true, tileCover: 0, losCover: 1,
+    moveCost: Number.POSITIVE_INFINITY, hp: 220, becomes: 'rubble', height: 1.6,
+    color: '#536960', topColor: '#687a6d',
+  },
+  supplyCrate: {
+    id: 'supplyCrate', label: 'Caisse de ravitaillement', solid: true, tileCover: 0, losCover: 1,
+    moveCost: Number.POSITIVE_INFINITY, hp: 85, becomes: 'rubble', height: 1.0,
+    color: '#81765b', topColor: '#a09373',
+  },
+  roadblock: {
+    id: 'roadblock', label: 'Barrage en béton', solid: true, tileCover: 0, losCover: 1,
+    moveCost: Number.POSITIVE_INFINITY, hp: 190, becomes: 'rubble', height: 0.9,
+    color: '#8f9389', topColor: '#aaa99a',
   },
   wall: {
     id: 'wall',

@@ -1,3 +1,52 @@
+# Opération Carrefour — bataille tactique moderne sans fin
+
+Deux forces fictives se battent sur une carte délimitée et ouverte, sans bâtiments : deux lignes de tranchées, quelques sacs de sable et des caisses de ravitaillement. Les postes de secours sont des croix au sol. Les tranchées procurent une couverture et ralentissent le déplacement ; leur creusement est stylisé au sol, sans différence physique de hauteur. Le scénario historique Opération Carrefour reste inchangé dans le code.
+**La bataille est sans fin**, pas la carte : aucune victoire automatique, et les
+combattants morts ou ayant fui sont remplacés après 10 secondes de simulation.
+Les renforts sont illimités. Les cadavres restent visibles 15 secondes avant d'être
+retirés pour limiter l'utilisation de mémoire ; les nouveaux soldats ont un
+identifiant et un équipement neufs.
+
+Les camps disposent de combattants à mains nues, de porteurs de lame, de pistolets,
+de fusils et de grenadiers, plus un chef et un médecin. Les quatre modèles d'armes
+Meshy sont intégrés. La lame utilise des frappes synchronisées et une zone de contact
+tactique ; les tirs utilisent précision, portée, ligne de vue et rechargement (les
+munitions restent illimitées dans les anciens scénarios). Une grenade peut toucher les alliés. Voir
+`src/assets/weapons/README.md` pour les modèles et leurs limites.
+
+Sélectionnez des soldats au clic gauche (ou avec un cadre), donnez un ordre au clic
+droit et appuyez sur **Espace** pour démarrer. Pour lancer une grenade, sélectionnez
+un grenadier, appuyez sur **G** ou cliquez sur **Grenade**, puis visez au clic gauche.
+Le bouton **Nouvelle bataille** redémarre la partie. La pause fige la simulation et
+les délais de réapparition.
+
+La vue 3D dispose d'une caméra pivotante (**X / V** ou ⟲ / ⟳) et de ragdolls ;
+la vue 2D sert aussi de secours. Le contrôle direct en FPS est disponible ; il n’y a pas de véhicules pilotables ni de multijoueur.
+Les modèles et leur placement ont été contrôlés dans Chromium sans interface ; ils n'ont pas été vérifiés dans Brave.
+
+### Communications tactiques
+
+Les soldats communiquent par bulles de texte et dans le journal : ils signalent un ennemi visible ou demandent du renfort lorsqu'ils sont blessés. Les alliés proches présents au moment de l'appel peuvent utiliser l'information pendant quelques secondes. Les ordres du joueur, tenir et repli restent prioritaires. Il n'y a pas encore de voix ni de dialogue libre.
+
+### Rôles dans la mission
+
+Chaque camp commence avec 13 combattants : un chef, trois combattants à mains
+nues, deux à la lame, trois fusiliers, deux porteurs de pistolet, un grenadier et
+un médecin. Le médecin soigne les vivants mais ne ressuscite pas les morts.
+
+### Jouer sans serveur
+
+```bash
+npm install
+npm run build:offline
+```
+
+Ouvrir ensuite `dist/operation-carrefour.html` dans un navigateur sur ordinateur. La souris et le clavier sont nécessaires. Le fichier est autonome et n’a pas besoin d’une connexion Internet.
+
+---
+
+## Documentation du prototype d’origine
+
 # grimdark-sim — v0 « Le Hameau de la Cloche »
 
 Prototype jouable d'un **simulateur de guerre tactique isométrique 2.5D grimdark** :
@@ -50,6 +99,8 @@ npm run dev -- --host  # accessible depuis une autre machine
 ```
 
 Puis ouvrir l'URL affichée (par défaut <http://localhost:5183>).
+La bataille commence en pause : sélectionnez des soldats et appuyez sur Espace pour lancer le combat. Les déplacements de groupe répartissent les soldats autour du point choisi.
+
 La graine est fixe (20261001) : la même bataille se rejoue à l'identique à chaque
 rechargement. Le bouton **Nouvelle bataille** tire une graine aléatoire.
 
@@ -128,10 +179,71 @@ grimdark-sim/
 
 ## Hors périmètre volontaire (V0)
 
-Pas de campagne, pas de sauvegarde, pas de multijoueur, pas de son, pas d'animations
-squelettiques, pas d'IA tactique profonde. Le but était d'avoir **un prototype jouable
+Pas de campagne, pas de sauvegarde, pas de multijoueur ni d'IA tactique profonde. Le but était d'avoir **un prototype jouable
 et une base saine**, pas un jeu fini. Voir le ROADMAP pour la suite.
 
 ## Licence
 
 Projet privé, licence non définie à ce stade.
+
+### Mode FPS (prototype)
+
+Sélectionner un soldat puis cliquer **Mode FPS** ; sans sélection, un fusilier Aegis est choisi. Le champ de bataille et le soldat sont les mêmes qu'en mode tactique. Autoriser la capture de la souris : **ZQSD/WASD** pour bouger, souris pour viser, clic gauche pour tirer ou frapper, clic droit maintenu pour le zoom avec une arme à feu, **R** pour recharger, **Espace** pour pause. **Échap** libère la souris et met la partie en pause ; cliquer sur le terrain recapture la souris, ou cliquer **Quitter FPS** pour revenir à la vue tactique. Si le soldat meurt ou fuit, retour automatique en vue tactique et pause ; sélectionner un autre soldat pour reprendre. Le chargeur est affiché en cartouches, avec une réserve illimitée ; le fusil tire toujours trois cartouches par salve. La recharge reste automatique en plus de R.
+
+Le FPS utilise les règles tactiques existantes : obstacles et portée bloquent le tir ; un allié intercepte les balles sans subir de dégâts. Dans Carrefour sans fin, le viseur tient compte de la chute et des volumes simplifiés sur la trajectoire centrale. Il reste indicatif : la dispersion, la suppression ou le déplacement d'une cible peuvent changer l'impact. Les scénarios antérieurs conservent leurs tirs instantanés. La vue de l'arme n'a pas encore de bras dédiés.
+
+L'interface FPS affiche la vie, les cartouches restantes et la progression de recharge. Une croix apparaît seulement quand une attaque du joueur touche réellement (rouge pour une élimination) ; une vignette rouge indique une perte de vie, y compris par explosion. Ces effets sont visuels et ne changent pas les dégâts.
+
+### Collisions et chutes
+
+Les soldats occupent un disque de collision : en vue tactique comme en FPS, ils glissent le long des obstacles sans traverser leurs coins, et les bousculades ne les poussent plus dans les murs. Les chemins et esquives tiennent compte de ce rayon. Les explosions projettent visuellement les corps depuis leur point d'impact, avec une impulsion verticale limitée ; coudes et genoux ont des limites articulaires plus serrées. Le ragdoll reste purement visuel et ne bloque pas les vivants ; il est figé après cinq secondes pour limiter le coût.
+
+### Trajectoire des grenades
+
+Les grenades suivent un arc calculé par la simulation, avec gravité et rebonds amortis sur le sol et les obstacles. Elles peuvent franchir un obstacle assez bas ; un mur trop haut peut les renvoyer vers le lanceur. Elles explosent à leur position réelle à la fin de la mèche, même après un rebond : attention aux alliés. Le rendu 2D et 3D suit la même trajectoire. Les obus d'artillerie conservent leur fonctionnement antérieur.
+
+Le zoom FPS réduit aussi la dispersion des tirs balistiques ; elle augmente en mouvement et sous suppression. L’anneau autour du viseur en donne une indication visuelle, volontairement agrandie pour rester lisible. Le recul, le mouvement de l'arme et le geste de recharge sont visuels ; ils ne déplacent pas le viseur. R peut démarrer une recharge dès la fin d'une salve, sans attendre le délai entre deux tirs.
+
+### Créature indépendante
+
+La bataille sans fin accueille une créature hostile aux deux camps : elle poursuit le soldat visible le plus proche et frappe au contact. Elle peut être blessée et tuée comme les autres unités, puis réapparaît après 10 secondes de simulation. Elle ne capture pas les objectifs et ne reçoit pas d’ordres. Le modèle fourni ne contient aucun clip d’animation ; son squelette est animé de manière procédurale, sans ragdoll dédié. Les collisions restent approximatives.
+
+### Balistique des armes à feu
+
+Dans le scénario Carrefour sans fin, chaque cartouche est un projectile déterministe : vitesse différente selon l'arme, gravité, portée limitée et collisions avec le sol, les volumes du décor et les volumes simplifiés des personnages. La trace et les dégâts suivent le trajet réel, après un temps de vol ; une cible peut bouger après le tir. La visée FPS utilise directement la direction de la souris avec une dispersion différente par cartouche : elle varie selon l'arme, la visée, le mouvement réel et la suppression du tireur. L'IA ajuste sa visée en fonction de la distance et sa dispersion dépend de la précision tactique. Un allié intercepte les balles sans subir de dégâts. Pas de pénétration, de ricochet ni de collision sur les os ; les vitesses sont réduites pour la lisibilité. Les projectiles sont représentés en 3D par une petite balle et une courte traînée interpolées sur leur trajet réel ; leur taille est légèrement exagérée pour les rendre visibles. Ils disparaissent à l'impact, au sol ou à la limite de leur portée. Les scénarios antérieurs conservent leurs tirs instantanés ; grenades et obus gardent leur fonctionnement.
+
+### Fluidité et ressources
+
+Les décors 3D ne sont mis à jour que si le terrain ou l'affichage de couverture change. Les animations chargent leurs actions à la demande et les clones libèrent leurs squelettes graphiques quand ils disparaissent. Les modèles de fusil et de pistolet ont été allégés. La résolution 3D est plafonnée à 1,5 fois la densité CSS ; l'interface garde sa propre résolution. Les performances effectives dépendent de l'appareil, du navigateur et de la charge de la bataille.
+
+### Effets sonores (facultatifs)
+
+Le bouton **Son : coupé** active les effets sonores procéduraux, générés localement sans téléchargement. Le son est coupé au démarrage et peut être recoupé à tout moment. Tirs, impacts, explosions et combats rapprochés sont atténués avec la distance et répartis en stéréo. Le nombre de sons simultanément déclenchés par tick est limité. Ce ne sont pas des enregistrements réalistes ni des voix.
+
+### Ambiance de combat 3D
+
+Un ciel voilé procédural accompagne la rotation de la caméra. Les tirs, impacts et explosions produisent des particules de fumée, de poussière et d'étincelles dans le monde 3D, y compris en FPS. Des ombres de contact simplifiées ancrent les soldats et la créature au sol. Les effets se figent en pause, sont limités en nombre et ne modifient ni les dégâts ni les collisions. Quand le son est activé, les déplacements des soldats proches génèrent des bruits de pas procéduraux atténués par la distance ; aucun enregistrement ni service extérieur n'est utilisé. Les ombres sont des approximations visuelles, pas des ombres physiques du soleil.
+
+### Champ de bataille à tranchées
+
+La carte de bataille sans fin reste délimitée à 44 × 34 tuiles. Deux lignes de tranchées avec de courts boyaux et quelques sacs de sable remplacent les rues et les bâtiments. Les tranchées sont praticables, offrent une couverture et ralentissent les déplacements. Elles sont représentées par des tuiles sombres, des bordures basses et des planches : il n'y a pas d'excavation physique ni de changement de hauteur des soldats. Les bordures sont uniquement visuelles.
+
+Chaque camp garde un poste de secours marqué au sol et les huit caisses de ravitaillement restent solides et destructibles. Trois objectifs structurent le terrain. La carte conserve ses zones de déploiement ; le scénario Opération Carrefour initial reste inchangé.
+
+### Carte tactique
+
+Une mini-carte repliable présente le terrain, les objectifs, les deux camps et la créature. Cliquer ou faire glisser dessus recentre la caméra ; quand elle est sélectionnée, les flèches du clavier permettent aussi de la déplacer. Le contour correspond à la vue tactique, y compris après rotation et zoom. La carte se masque en mode FPS et revient à la sortie. Elle montre toutes les unités vivantes : il n'y a pas de brouillard de guerre. Le fond n'est reconstruit que lorsque le terrain change ; cette interface ne donne aucun ordre aux soldats.
+
+### Autonomie et logistique (bataille sans fin)
+
+Les soldats disposent d’un bandage et, pour les armes à feu, de réserves limitées. Hors danger et sans ordre direct, ils prennent trois secondes pour les premiers soins quand leur vie tombe à 65 % ou moins. Les médecins soignent toujours les alliés proches. Les caisses intactes contiennent des munitions (comptées en salves), bandages, kits médicaux et grenades : les soldats libres ayant besoin de matériel se déplacent vers une caisse proche. Les stocks sont partagés entre les deux camps, limités et partiellement renouvelés toutes les 60 secondes tant que la caisse existe ; une caisse détruite n’est plus utilisable. En FPS, approchez-vous d’une caisse pour récupérer automatiquement les ressources nécessaires.
+
+Les médecins libres sont prioritaires pour évacuer un blessé proche ; à défaut, un allié disponible peut le transporter. Les ordres directs restent prioritaires ; les premiers soins et la recherche de ressources s’interrompent sous le feu. Un porteur continue son évacuation tant qu’il reste en état de le faire. Les blessés graves ne peuvent pas se soigner eux-mêmes. Ce sont des règles de simulation simplifiées, pas un système médical ou logistique réaliste complet.
+
+### Animation de la créature
+
+Le GLB de la créature ne comporte pas de clips d’animation. Son squelette est animé de façon procédurale : respiration, mouvements alternés des pattes et des ailes en déplacement, coup vers l’avant, réaction aux dégâts et chute progressive. L’animation suit les ticks et se fige en pause ; elle ne change ni les hitboxes ni les règles de combat. Les pattes ne sont pas verrouillées au sol et la chute n’est pas un ragdoll physique.
+
+### Créature bipède
+
+La créature est désormais deux fois plus grande et son torse est redressé sur ses pattes arrière ; ses pattes avant servent de bras. L'animation reste procédurale car son modèle d'origine ne contient pas de clips. La portée des griffes, le volume balistique et la sélection ont été adaptés. La navigation conserve une collision au sol simplifiée sur le terrain : les ailes et le corps peuvent donc encore traverser visuellement certains éléments du décor, et les pieds ne sont pas verrouillés au sol.

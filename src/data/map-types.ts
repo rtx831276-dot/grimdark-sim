@@ -46,7 +46,21 @@ export interface MapDefinition {
     water: number;
   };
   objectives: ObjectiveDef[];
+  /** Postes médicaux fixes : une destination de soins par faction. */
+  hospitals?: Partial<Record<FactionId, Vec2>>;
   deployment: Record<FactionId, DeploymentZone>;
+  /** Renforts limités par faction et délai en ticks ; absent = pas de respawn. */
+  respawn?: { reservesPerFaction: number; delayTicks: number; unlimited?: boolean };
+  /** La bataille continue sans condition d’élimination. */
+  endlessBattle?: boolean;
+  /** Active les réserves et le ravitaillement autonomes. */
+  logistics?: boolean;
+  /** Les armes à feu utilisent des projectiles à trajectoire physique. */
+  ballisticWeapons?: boolean;
+  /** Autorise les signalements tactiques entre alliés dans ce scénario. */
+  tacticalCommunications?: boolean;
+  /** Composition propre au scénario ; sinon les effectifs par défaut des factions sont utilisés. */
+  rosters?: Partial<Record<FactionId, Array<{ unit: string; count: number }>>>;
   /** Point de ralliement des unités démoralisées (repli), par faction. */
   fallbackLine: Record<FactionId, Vec2>;
 }
