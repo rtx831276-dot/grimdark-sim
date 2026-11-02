@@ -32,7 +32,7 @@ import { makeModernSky } from './sky';
 import { sampleBulletTrace } from './projectile-visuals';
 
 const MODERN_GROUND_COLORS: Partial<Record<import('../data/terrain').TerrainId, number>> = {
-  mud: 0x858575, road: 0x868e8c, pavement: 0x969991, crater: 0x655e50, rubble: 0x8b8d83,
+  mud: 0x777764, trench: 0x38382d, road: 0x868e8c, pavement: 0x969991, crater: 0x655e50, rubble: 0x8b8d83,
   sandbag: 0x858575, wall: 0x858575, urbanWall: 0x858575, door: 0x858575, tree: 0x858575,
   fence: 0x858575, water: 0x5f7774, wreck: 0x868e8c, container: 0x858575, roadblock: 0x858575, supplyCrate: 0x969991,
 };

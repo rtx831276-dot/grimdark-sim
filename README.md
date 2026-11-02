@@ -1,6 +1,6 @@
 # Opération Carrefour — bataille tactique moderne sans fin
 
-Deux forces fictives se battent sur la carte délimitée d’Opération Carrefour.
+Deux forces fictives se battent sur une carte délimitée et ouverte, sans bâtiments : deux lignes de tranchées, quelques sacs de sable et des caisses de ravitaillement. Les postes de secours sont des croix au sol. Les tranchées procurent une couverture et ralentissent le déplacement ; leur creusement est stylisé au sol, sans différence physique de hauteur. Le scénario historique Opération Carrefour reste inchangé dans le code.
 **La bataille est sans fin**, pas la carte : aucune victoire automatique, et les
 combattants morts ou ayant fui sont remplacés après 10 secondes de simulation.
 Les renforts sont illimités. Les cadavres restent visibles 15 secondes avant d'être
@@ -224,11 +224,11 @@ Le bouton **Son : coupé** active les effets sonores procéduraux, générés lo
 
 Un ciel voilé procédural accompagne la rotation de la caméra. Les tirs, impacts et explosions produisent des particules de fumée, de poussière et d'étincelles dans le monde 3D, y compris en FPS. Des ombres de contact simplifiées ancrent les soldats et la créature au sol. Les effets se figent en pause, sont limités en nombre et ne modifient ni les dégâts ni les collisions. Quand le son est activé, les déplacements des soldats proches génèrent des bruits de pas procéduraux atténués par la distance ; aucun enregistrement ni service extérieur n'est utilisé. Les ombres sont des approximations visuelles, pas des ombres physiques du soleil.
 
-### Quartier Carrefour
+### Champ de bataille à tranchées
 
-La carte de bataille sans fin conserve ses limites de 44 × 34 tuiles. L'avenue est-ouest relie les deux camps ; deux rues secondaires desservent les bâtiments et le dépôt au sud ; les façades ont été rehaussées à l'échelle des soldats. Épaves, conteneurs et barrages en béton créent de nouveaux angles de combat : ces obstacles sont des tuiles solides, bloquent les déplacements et la ligne de vue tactique, et peuvent devenir des gravats praticables sous les explosions ou les tirs qui endommagent le terrain. Les véhicules sont des épaves fixes, pas des véhicules pilotables ; chaque partie d'une épave ou d'un conteneur est détruite séparément. Les collisions des balles et grenades utilisent des volumes simplifiés, tandis que la ligne de vue tactique considère toute tuile solide comme opaque, même pour un barrage bas. Les bandes au sol, bordures basses et façades sont visuelles ; les décors sont instanciés et actualisés à la destruction du terrain. Le scénario Opération Carrefour initial reste inchangé.
+La carte de bataille sans fin reste délimitée à 44 × 34 tuiles. Deux lignes de tranchées avec de courts boyaux et quelques sacs de sable remplacent les rues et les bâtiments. Les tranchées sont praticables, offrent une couverture et ralentissent les déplacements. Elles sont représentées par des tuiles sombres, des bordures basses et des planches : il n'y a pas d'excavation physique ni de changement de hauteur des soldats. Les bordures sont uniquement visuelles.
 
-Le quartier infini comprend aussi deux rues de contournement, une rue des ateliers au nord et une rue du dépôt au sud, chacune avec son objectif. Deux ateliers accessibles et des cours bitumées diversifient les abords ; les caisses de ravitaillement sont des obstacles solides et destructibles. Les marquages des cours et les enseignes sont purement visuels. La carte reste délimitée et conserve ses zones de déploiement.
+Chaque camp garde un poste de secours marqué au sol et les huit caisses de ravitaillement restent solides et destructibles. Trois objectifs structurent le terrain. La carte conserve ses zones de déploiement ; le scénario Opération Carrefour initial reste inchangé.
 
 ### Carte tactique
 
@@ -246,4 +246,4 @@ Le GLB de la créature ne comporte pas de clips d’animation. Son squelette est
 
 ### Créature bipède
 
-La créature est désormais deux fois plus grande et son torse est redressé sur ses pattes arrière ; ses pattes avant servent de bras. L'animation reste procédurale car son modèle d'origine ne contient pas de clips. La portée des griffes, le volume balistique et la sélection ont été adaptés. La navigation conserve une collision au sol simplifiée pour emprunter les rues : les ailes et le corps peuvent donc encore traverser visuellement certains éléments du décor, et les pieds ne sont pas verrouillés au sol.
+La créature est désormais deux fois plus grande et son torse est redressé sur ses pattes arrière ; ses pattes avant servent de bras. L'animation reste procédurale car son modèle d'origine ne contient pas de clips. La portée des griffes, le volume balistique et la sélection ont été adaptés. La navigation conserve une collision au sol simplifiée sur le terrain : les ailes et le corps peuvent donc encore traverser visuellement certains éléments du décor, et les pieds ne sont pas verrouillés au sol.

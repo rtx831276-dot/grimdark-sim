@@ -85,7 +85,7 @@ export class Minimap {
       for (let i = 0; i < map.tiles.length; i++) {
         const id = map.tiles[i]!.terrain;
         bg.fillStyle = TERRAIN[id].solid ? '#4b514b' : id === 'road' ? '#8a918c' :
-          id === 'pavement' ? '#9a9c90' : id === 'water' ? '#536e6d' : id === 'crater' ? '#5b564b' :
+          id === 'pavement' ? '#9a9c90' : id === 'trench' ? '#3e4033' : id === 'water' ? '#536e6d' : id === 'crater' ? '#5b564b' :
             id === 'rubble' ? '#797970' : id === 'sandbag' ? '#b0a47e' : '#747668';
         bg.fillRect(i % map.width * sx, Math.floor(i / map.width) * sy, Math.ceil(sx), Math.ceil(sy));
       }

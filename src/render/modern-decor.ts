@@ -43,6 +43,17 @@ export function modernDecorParts(map: GameMap): DecorPart[] {
       if ((x * 7 + z * 13) % 17 === 0)
         add(x + 0.56, 0.011, z + 0.38, 0.35, 0.01, 0.22, 0x7c8179);
     }
+    // Tranchée stylisée au sol : planches et bords bas purement visuels,
+    // sans obstacle supplémentaire ni collision fantôme pour l'infanterie.
+    if (t === 'trench' && map.def.id === 'carrefour-infini') {
+      for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) {
+        if (at(x + dx, z + dz) === 'trench') continue;
+        add(x + 0.5 + dx * 0.45, 0.055, z + 0.5 + dz * 0.45,
+          dx ? 0.10 : 0.92, 0.11, dx ? 0.92 : 0.10, 0x776b50);
+      }
+      if ((x + z) % 2 === 0)
+        add(x + 0.5, 0.012, z + 0.5, 0.85, 0.024, 0.10, 0x8a7657);
+    }
     // Fenêtres sombres et linteaux sur les façades exposées, visibles de tous les angles.
     if (wall(t)) {
       const h = TERRAIN[t!].height * 0.82;
