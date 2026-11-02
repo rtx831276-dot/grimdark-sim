@@ -2,6 +2,7 @@ import type { Vec2 } from '../core/ids';
 import type { GameMap } from './types';
 import { isSolid, moveCostAt, nearestWalkable, terrainAt, tileAt } from './map';
 import { lineOfSight } from './los';
+import { segmentClearOfTerrain } from './collision';
 
 const DIAGONAL = Math.SQRT2;
 
@@ -149,15 +150,7 @@ function smooth(path: Vec2[], map: GameMap): Vec2[] {
 
 /** Échantillonne un segment pour vérifier qu'il ne traverse pas de tuile pleine. */
 function segmentWalkable(map: GameMap, from: Vec2, to: Vec2): boolean {
-  const distance = Math.hypot(to.x - from.x, to.y - from.y);
-  const steps = Math.max(1, Math.ceil(distance * 3));
-  for (let s = 1; s < steps; s++) {
-    const t = s / steps;
-    const x = from.x + (to.x - from.x) * t;
-    const y = from.y + (to.y - from.y) * t;
-    if (isSolid(map, x, y)) return false;
-  }
-  return true;
+  return segmentClearOfTerrain(map, from, to);
 }
 
 /**

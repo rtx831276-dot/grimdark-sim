@@ -80,6 +80,7 @@ export function detonate(
       faction,
       kind: 'explosive',
       label: 'explosion',
+      blastOrigin: { x, y },
     });
     if (unit.alive && gun.kind === 'grenade') {
       // Une grenade qui n'a pas tué laisse l'unité à terre, hébétée.

@@ -1,5 +1,6 @@
 import './styles.css';
 import { BattleApp } from './app';
+import { ENDLESS_CARREFOUR } from './data/maps/endless-carrefour';
 
 /**
  * Point d'entrée navigateur. Il ne contient AUCUNE règle de jeu : il branche le canvas,
@@ -7,6 +8,7 @@ import { BattleApp } from './app';
  */
 
 const canvas = document.querySelector<HTMLCanvasElement>('#battlefield');
+const canvas3d = document.querySelector<HTMLCanvasElement>('#battlefield-3d');
 const hudRoot = document.querySelector<HTMLElement>('#hud');
 
 if (!canvas || !hudRoot) {
@@ -15,9 +17,11 @@ if (!canvas || !hudRoot) {
 
 const app = new BattleApp({
   canvas,
+  canvas3d: canvas3d ?? undefined,
   hudRoot,
   // Graine fixe : la même bataille se rejoue à l'identique à chaque rechargement.
   seed: 20261001,
+  map: ENDLESS_CARREFOUR,
 });
 
 function resizeCanvas(): void {
@@ -33,7 +37,7 @@ function resizeCanvas(): void {
 
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
-// Cadrage initial : l'église au centre du champ de vision.
+// Cadrage initial sur le poste de commandement.
 app.camera.centerOn(23, 12);
 app.camera.zoom = 1.05;
 app.start();

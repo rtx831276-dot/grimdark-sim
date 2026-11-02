@@ -13,12 +13,18 @@ export * from './simulation';
 // une bataille en headless.
 export * from './ai/index';
 export * from './combat';
+export * from './direct-control';
+export * from './melee-timing';
+export * from './melee-hitbox';
 export * from './morale';
 export * from './explosion';
 export * from './pathfinding';
 export * from './map';
 export * from './los';
 export * from './movement';
+export * from './collision';
+export * from './grenade-physics';
+export * from './ballistics';
 export * from './abilities';
 
 export type {
@@ -31,6 +37,7 @@ export type {
   SimStats,
   Stance,
   TileState,
+  TacticalReport,
   Unit,
   UnitState,
 } from './types';

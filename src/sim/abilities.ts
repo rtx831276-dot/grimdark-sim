@@ -1,7 +1,10 @@
 import { distance } from '../core/math';
 import type { FactionId } from '../core/ids';
 import { factionDef } from '../data/factions';
-import { unitDef } from '../data/units';
+import { unitDef, type AbilityId } from '../data/units';
+import { lineOfSight } from './los';
+import { createGrenadeMotion } from './grenade-physics';
+import { inBounds } from './map';
 import { weapon } from '../data/weapons';
 import type { SimState, Unit } from './types';
 
@@ -31,15 +34,54 @@ function spawnProjectile(
     ty,
     impactTick: state.tick + ticks,
     flightTicks: ticks,
+    grenadeMotion: kind === 'grenade' ? createGrenadeMotion(unit.x, unit.y, tx, ty, ticks / TICKS_PER_SECOND) : undefined,
   });
 }
 
+export const HEAL_RANGE = 3;
+export const HEAL_AMOUNT = 20;
+export const HEAL_COOLDOWN = 12;
+/** Pour l'IA, ne pas dépenser une charge sur une blessure superficielle. */
+export const HEAL_MIN_MISSING = 8;
+
+/** Soigne un allié vivant, proche et visible ; ne ressuscite jamais. */
+export function useHeal(state: SimState, healer: Unit, target: Unit): boolean {
+  const slot = healer.abilities.heal;
+  if (!healer.alive || healer.state === 'broken' || !unitDef(healer.defId).abilities.includes('heal') ||
+      !slot || slot.charges <= 0 || slot.cooldown > 0 || !target.alive || target.hp <= 0 ||
+      target.id === healer.id || target.faction !== healer.faction || target.hp >= target.maxHp ||
+      distance(healer.x, healer.y, target.x, target.y) > HEAL_RANGE ||
+      !lineOfSight(state.map, healer.x, healer.y, target.x, target.y).visible) return false;
+  const amount = Math.min(HEAL_AMOUNT, target.maxHp - target.hp);
+  target.hp += amount;
+  slot.charges--;
+  slot.cooldown = HEAL_COOLDOWN;
+  state.events.push({ tick: state.tick, type: 'healed', unitId: healer.id, targetId: target.id,
+    faction: healer.faction, x: target.x, y: target.y, amount });
+  return true;
+}
+
+/** Le blessé allié le plus atteint à portée : ordre stable en cas d'égalité. */
+export function woundedAllyFor(state: SimState, healer: Unit): Unit | null {
+  let best: Unit | null = null;
+  for (const target of state.units) {
+    if (!target.alive || target.hp <= 0 || target.id === healer.id || target.faction !== healer.faction ||
+        target.maxHp - target.hp < HEAL_MIN_MISSING ||
+        distance(healer.x, healer.y, target.x, target.y) > HEAL_RANGE ||
+        !lineOfSight(state.map, healer.x, healer.y, target.x, target.y).visible) continue;
+    const ratio = target.hp / target.maxHp;
+    const bestRatio = best ? best.hp / best.maxHp : Infinity;
+    if (ratio < bestRatio || (ratio === bestRatio && target.id < (best?.id ?? Infinity))) best = target;
+  }
+  return best;
+}
+
 /**
- * Lance une grenade. L'arme est à arc : elle passe par-dessus les murs, ce qui en fait
- * le seul moyen de déloger une unité terrée derrière un mur sans la voir.
+ * Lance une grenade en cloche : elle franchit les obstacles assez bas mais peut
+ * rebondir sur le décor et exploser ailleurs que sur le point visé.
  */
 export function useGrenade(state: SimState, unit: Unit, x: number, y: number): boolean {
-  if (!unit.alive || unit.state === 'broken') return false;
+  if (!unit.alive || unit.state === 'broken' || !Number.isFinite(x) || !Number.isFinite(y) || !inBounds(state.map, Math.floor(x), Math.floor(y))) return false;
   const def = unitDef(unit.defId);
   if (!def.abilities.includes('grenade')) return false;
   const slot = unit.abilities.grenade;
@@ -180,7 +222,7 @@ export function useCharge(state: SimState, unit: Unit): boolean {
 
 /** Décrémente les temps de recharge des capacités. */
 export function updateAbilityCooldowns(state: SimState, unit: Unit, dt: number): void {
-  for (const key of Object.keys(unit.abilities) as Array<'grenade' | 'artillery' | 'rally' | 'charge'>) {
+  for (const key of Object.keys(unit.abilities) as AbilityId[]) {
     const slot = unit.abilities[key];
     if (!slot) continue;
     if (slot.cooldown > 0) slot.cooldown = Math.max(0, slot.cooldown - dt);

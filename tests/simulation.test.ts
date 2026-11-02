@@ -211,3 +211,27 @@ describe('bataille complète simulée sans rendu', () => {
     expect(state.events.some((event) => event.type === 'gameOver' || event.type === 'kill')).toBe(true);
   });
 });
+
+describe('ordres de groupe', () => {
+  it('répartit le groupe sur des cases praticables et distinctes, de façon déterministe', async () => {
+    const { isSolid } = await import('../src/sim/map');
+    const a = createSimulation({ seed: 42 });
+    const b = createSimulation({ seed: 42 });
+    const ids = a.units.filter((unit) => unit.faction === 'penitents').slice(0, 6).map((unit) => unit.id);
+    expect(issueOrder(a, { type: 'move', units: ids, x: 22.5, y: 15.5 })).toBe(true);
+    expect(issueOrder(b, { type: 'move', units: [...ids].reverse(), x: 22.5, y: 15.5 })).toBe(true);
+    const goals = ids.map((id) => a.units[id - 1]!.goal!);
+    expect(new Set(goals.map((goal) => `${goal.x},${goal.y}`)).size).toBe(ids.length);
+    for (const goal of goals) expect(isSolid(a.map, goal.x, goal.y)).toBe(false);
+    expect(ids.map((id) => b.units[id - 1]!.goal)).toEqual(goals);
+  });
+
+  it('ignore les doublons et les soldats démoralisés', () => {
+    const state = createSimulation({ seed: 42 });
+    const [first, broken] = state.units;
+    broken!.state = 'broken';
+    expect(issueOrder(state, { type: 'move', units: [first!.id, first!.id, broken!.id], x: 10.5, y: 10.5 })).toBe(true);
+    expect(first!.goal).toEqual({ x: 10.5, y: 10.5 });
+    expect(broken!.goal).toBeNull();
+  });
+});

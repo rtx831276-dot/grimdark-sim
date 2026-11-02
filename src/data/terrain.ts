@@ -13,6 +13,10 @@ export type TerrainId =
   | 'trench' // tranchée (forte couverture)
   | 'sandbag' // sacs de sable / parapet
   | 'rubble' // ruines, gravats (couverture moyenne, destructible)
+  | 'urbanWall' // façade de bâtiment moderne
+  | 'wreck' // épave de véhicule
+  | 'container' // conteneur de fret
+  | 'roadblock' // barrage en béton
   | 'wall' // mur de ruine (bloque la vue, destructible)
   | 'churchWall' // mur d'église (bloque la vue, très résistant)
   | 'tower' // beffroi (bloque la vue, quasi indestructible)
@@ -124,6 +128,28 @@ export const TERRAIN: Record<TerrainId, TerrainDef> = {
     height: 0.3,
     color: '#5d584c',
     topColor: '#6b6558',
+  },
+  // Obstacles du quartier moderne : ils occupent réellement leur tuile, arrêtent
+  // les déplacements et deviennent des gravats quand une explosion les détruit.
+  urbanWall: {
+    id: 'urbanWall', label: 'Façade en béton', solid: true, tileCover: 0, losCover: 1,
+    moveCost: Number.POSITIVE_INFINITY, hp: 200, becomes: 'rubble', height: 2.5,
+    color: '#999e98', topColor: '#b0b3aa',
+  },
+  wreck: {
+    id: 'wreck', label: 'Épave de véhicule', solid: true, tileCover: 0, losCover: 1,
+    moveCost: Number.POSITIVE_INFINITY, hp: 130, becomes: 'rubble', height: 1.1,
+    color: '#5a6157', topColor: '#73786b',
+  },
+  container: {
+    id: 'container', label: 'Conteneur de fret', solid: true, tileCover: 0, losCover: 1,
+    moveCost: Number.POSITIVE_INFINITY, hp: 220, becomes: 'rubble', height: 1.6,
+    color: '#536960', topColor: '#687a6d',
+  },
+  roadblock: {
+    id: 'roadblock', label: 'Barrage en béton', solid: true, tileCover: 0, losCover: 1,
+    moveCost: Number.POSITIVE_INFINITY, hp: 190, becomes: 'rubble', height: 0.9,
+    color: '#8f9389', topColor: '#aaa99a',
   },
   wall: {
     id: 'wall',
